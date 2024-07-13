@@ -5,7 +5,7 @@ use rand::Rng;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldElement{
-    value: i128,
+    pub value: i128,
     modulus: i128,
 }
 
