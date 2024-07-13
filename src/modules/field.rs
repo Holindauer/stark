@@ -5,14 +5,14 @@ use rand::Rng;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldElement{
-    value: i64,
-    modulus: i64,
+    value: i128,
+    modulus: i128,
 }
 
 // creates new field element at value w/ prime mod 3 * 2^30 + 1
-pub fn new_field_element(input_value: i64) -> FieldElement{
-    let modulus: i64 = 3 * 2_i64.pow(30) + 1; 
-    let value: i64 = input_value % modulus;
+pub fn new_field_element(input_value: i128) -> FieldElement{
+    let modulus: i128 = 3 * 2_i128.pow(30) + 1; 
+    let value: i128 = input_value % modulus;
     FieldElement{value, modulus}
 }
     
@@ -57,6 +57,7 @@ impl Sub for FieldElement {
     }
 }
 
+// negation
 impl Neg for FieldElement {
     type Output = FieldElement;
 
@@ -93,7 +94,10 @@ impl Div for FieldElement {
 }
 
 // exponentiation
-fn power(mut base: FieldElement, mut exp: u32) -> FieldElement {
+pub fn power(base: FieldElement, exp: i128) -> FieldElement {
+
+    let mut base = base.clone();
+    let mut exp = exp.clone();
     let mut result = one(); 
 
     // exponentiation by repeated squaring
@@ -105,10 +109,8 @@ fn power(mut base: FieldElement, mut exp: u32) -> FieldElement {
         exp /= 2;
     }
 
-    result
+    result 
 }
-
-
 
 // multiplicative inverse
 pub fn inverse(element: FieldElement) -> FieldElement {
@@ -195,7 +197,7 @@ mod tests {
     #[test]
     fn test_pow() {
         let a = new_field_element(2);
-        assert_eq!(power(a, 32).value, 2_i64.pow(32) % 3221225473);
+        assert_eq!(power(a, 32).value, 2_i128.pow(32) % 3221225473);
     }
 
 }
