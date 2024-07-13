@@ -1,10 +1,10 @@
 use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::fmt;
+use rand::Rng;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldElement{
-
     value: i64,
     modulus: i64,
 }
@@ -50,30 +50,22 @@ impl Sub for FieldElement {
 
     // subtract then mod by prime
     fn sub(self, other: FieldElement) -> FieldElement {
-
-        let mut value: i64 = self.value - other.value;
-
-        if value < 0 {
-            value = self.modulus - value; // if negative, add modulus
-        }
-
         FieldElement{
-            value: self.value % self.modulus, 
+            value: (self.value - other.value) % self.modulus, 
             modulus: self.modulus
         }
     }
 }
 
-// negation
 impl Neg for FieldElement {
     type Output = FieldElement;
 
-    // negate then mod by prime
     fn neg(self) -> FieldElement {
-        FieldElement{
-            value: zero().value - self.value, 
-            modulus: self.modulus
+        let mut result = self.modulus - self.value;
+        if result >= self.modulus {
+            result -= self.modulus;
         }
+        FieldElement { value: result, modulus: self.modulus }
     }
 }
 
@@ -100,40 +92,110 @@ impl Div for FieldElement {
     }
 }
 
-// field element inverse func
-fn inverse(element: FieldElement) -> FieldElement {
-    let mut t: i64 = 0;
-    let mut new_t: i64 = 1;
+// exponentiation
+fn power(mut base: FieldElement, mut exp: u32) -> FieldElement {
+    let mut result = one(); 
 
-    let mut r: i64 = element.modulus;
-    let mut new_r: i64 = element.value;
+    // exponentiation by repeated squaring
+    while exp > 0 {
+        if exp % 2 == 1 {
+            result = result * base;
+        }
+        base = base * base;
+        exp /= 2;
+    }
+
+    result
+}
+
+
+
+// multiplicative inverse
+pub fn inverse(element: FieldElement) -> FieldElement {
+    let mut t = 0;
+    let mut new_t = 1;
+    let mut r = element.modulus;
+    let mut new_r = element.value;
 
     while new_r != 0 {
-
-        let quotient: i64 = r / new_r;
-
-        t = new_t;
-        new_t = t - (quotient * new_t);
-
-        r = new_r;
-        new_r = r - (quotient * new_r);
+        let quotient = r / new_r;
+        (t, new_t) = (new_t, t - quotient * new_t);
+        (r, new_r) = (new_r, r - quotient * new_r);
     }
 
-    if r != 1 {
-        panic!("{} is not invertible", element);
+    if r > 1 { // This means `element.value` and `element.modulus` are not coprime
+        panic!("Element does not have an inverse");
     }
 
-    FieldElement{
-        value: t % element.modulus,
+    // Ensure the result is positive
+    if t < 0 {
+        t += element.modulus;
+    }
+
+    FieldElement {
+        value: t,
         modulus: element.modulus
     }
+}
+
+
+// random element
+pub fn random() -> FieldElement {
+    let mut rng = rand::thread_rng();
+    new_field_element(rng.gen_range(0..3221225472))
 }
 
 
 // prints field element value
 impl fmt::Display for FieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.value)
+        // Simple modulo to ensure it's within range and non-negative
+        let value = (self.value % self.modulus + self.modulus) % self.modulus;
+        write!(f, "{}", value)
     }
 }
 
+// tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::Rng;
+
+    #[test]
+    fn addition() {
+        let a = new_field_element(3221225472);
+        let b = new_field_element(10);
+        assert_eq!(a + b, new_field_element(9));
+    }
+
+    #[test]
+    fn subtraction() {
+
+        let a = new_field_element(3221225472);
+        let b = new_field_element(10);
+        let c = a - b;
+        println!("{:?}", c);
+
+        assert_eq!(3221225472 - 10, c.value);
+    }
+
+    #[test]
+    fn inverse_test() { 
+
+        // get rand int within mod
+        let mut rng = rand::thread_rng();
+        let random_number = rng.gen_range(1..3221225472); 
+    
+        // ensure multiplicative inverse works
+        let a = -new_field_element(random_number);
+        let c  = inverse(a);
+        assert_eq!(c * a, one());
+    }
+
+    #[test]
+    fn test_pow() {
+        let a = new_field_element(2);
+        assert_eq!(power(a, 32).value, 2_i64.pow(32) % 3221225473);
+    }
+
+}
