@@ -15,9 +15,21 @@ pub struct Polynomial {
 
 // polynomial constructor
 impl Polynomial {
+
     // coefficients stored highest to lowest degree
     pub fn new(coeffs: Vec<FieldElement>) -> Self {
         Polynomial { coeffs }
+    }
+    
+    // evaluate polynomial at field element x
+    pub fn eval(&self, x: FieldElement) -> FieldElement {
+
+        // evaluate polynomial at x using Horner's method
+        let mut val: i128 = 0;
+        for coef in self.coeffs.iter() {
+            val = (val * x.value + coef.value) % x.modulus;
+        }
+        new_field_element(val)
     }
 }
 
@@ -74,21 +86,6 @@ impl fmt::Display for Polynomial {
 }
 
 
-/**
-
-def eval(self, point):
-    """
-    Evaluates the polynomial at the given point using Horner evaluation.
-    """
-    point = FieldElement.typecast(point).val
-    val = 0
-    for coef in self.poly[::-1]:
-        val = (val * point + coef.val) % FieldElement.k_modulus
-    return FieldElement(val)
-
- */
-
-
 
 
 // tests
@@ -122,7 +119,6 @@ mod tests {
     #[test]
     fn add_diff_degree() {
 
-
         // field element coefficients
         let coeffs_1: Vec<FieldElement> = vec![new_field_element(10), new_field_element(3), new_field_element(1)];
         let coeffs_2: Vec<FieldElement> = vec![
@@ -136,7 +132,7 @@ mod tests {
 
         // add them
         let poly = poly_1.clone() + poly_2.clone();
-        
+
         // ensure correct
         assert_eq!(poly.coeffs.get(0).unwrap().value, 1);
         assert_eq!(poly.coeffs.get(1).unwrap().value, 2);
@@ -144,6 +140,13 @@ mod tests {
         assert_eq!(poly.coeffs.get(3).unwrap().value, 100);
         assert_eq!(poly.coeffs.get(4).unwrap().value, 6);
         assert_eq!(poly.coeffs.get(5).unwrap().value, 2);
+    }
+
+    #[test]
+    fn eval_test(){
+        let poly = Polynomial::new(vec![new_field_element(10), new_field_element(3), new_field_element(1)]);
+        let out = poly.eval(new_field_element(2));
+        assert_eq!(out.value,  47);
     }
 }
 

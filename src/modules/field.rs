@@ -11,7 +11,7 @@ use rand::Rng;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldElement{
     pub value: i128,
-    modulus: i128,
+    pub modulus: i128,
 }
 
 // creates new field element at value w/ prime mod 3 * 2^30 + 1
