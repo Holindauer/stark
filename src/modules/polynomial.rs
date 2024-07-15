@@ -31,6 +31,11 @@ impl Polynomial {
         }
         new_field_element(val)
     }
+
+    // get degree of polynomial
+    pub fn degree(&self) -> usize {
+        self.coeffs.len() - 1
+    }
 }
 
 // polynomial addition
@@ -129,6 +134,41 @@ impl Sub for Polynomial {
         Polynomial::new(res)
     }
 }
+
+/**
+    def __mul__(self, other):
+        other = Polynomial.typecast(other)
+        pol1, pol2 = [[x.val for x in p.poly] for p in (self, other)]
+        res = [0] * (self.degree() + other.degree() + 1)
+        for i, c1 in enumerate(pol1):
+            for j, c2 in enumerate(pol2):
+                res[i + j] += c1 * c2
+        res = [FieldElement(x) for x in res]
+        return Polynomial(res)
+
+ */
+
+// polynomial multiplication
+impl Mul for Polynomial {
+    type Output = Polynomial;
+
+    fn mul(self, rhs: Polynomial) -> Polynomial {
+       
+        // init result coeffs vec with self.degree + rhs.degree + 1 zero() elements
+        let mut res: Vec<FieldElement> = vec![zero(); self.degree() + rhs.degree() + 1];    
+
+        // multiply polynomials by convolution
+        for (i, c1) in self.coeffs.iter().enumerate() {
+            for (j, c2) in rhs.coeffs.iter().enumerate() {
+                res[i + j] = res[i + j] + (*c1) * (*c2);
+            }
+        }
+
+        Polynomial::new(res)
+    }
+}
+
+
 
 // negation
 impl Neg for Polynomial {
@@ -261,6 +301,19 @@ mod tests {
         assert_eq!(poly.coeffs.get(3).unwrap().value, 100);
         assert_eq!(poly.coeffs.get(4).unwrap().value, 6);
         assert_eq!(poly.coeffs.get(5).unwrap().value, 2);
+    }
+
+
+    #[test]
+    fn mul_test() {
+        // multiply, evaluate, and ensure correct
+        let poly_1: Polynomial = Polynomial::new(vec![new_field_element(10), new_field_element(1), new_field_element(0), new_field_element(1)]);
+        let poly_2: Polynomial = Polynomial::new(vec![new_field_element(3), new_field_element(1), new_field_element(17)]);
+        let poly = poly_1.clone() * poly_2.clone();
+        let eval_poly = poly.eval(new_field_element(2));
+
+        // ensure correct
+        assert_eq!(eval_poly.value,  2635);
     }
 
     #[test]
