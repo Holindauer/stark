@@ -17,8 +17,8 @@ pub struct Polynomial {
 impl Polynomial {
 
     // coefficients stored highest to lowest degree
-    pub fn new(coeffs: Vec<FieldElement>) -> Self {
-        Polynomial { coeffs }
+    pub fn new(coeffs: Vec<i128>) -> Self {
+        Polynomial { coeffs: coeffs.iter().map(|&x| FieldElement::new(x)).collect() }
     }
     
     // evaluate polynomial at field element x
@@ -81,7 +81,7 @@ impl Add for Polynomial {
             res.push(coeff_1 + coeff_2);
         }
 
-        Polynomial::new(res)
+        Polynomial::new(res.iter().map(|x| x.value).collect())
     }
 }
 
@@ -139,9 +139,7 @@ impl Sub for Polynomial {
             res.push(lhs_coeff - rhs_coeff);
         }
 
-        println!("{:?}", res);
-
-        Polynomial::new(res)
+        Polynomial::new(res.iter().map(|x| x.value).collect())
     }
 }
 
@@ -161,7 +159,7 @@ impl Mul for Polynomial {
             }
         }
 
-        Polynomial::new(res)
+        Polynomial::new(res.iter().map(|x| x.value).collect())
     }
 }
 
@@ -175,7 +173,7 @@ impl Neg for Polynomial {
         for coef in self.coeffs.iter() {
             res.push(FieldElement::zero() - *coef);
         }
-        Polynomial::new(res)
+        Polynomial::new(res.iter().map(|x| x.value).collect())
     }
 }
 
@@ -254,8 +252,8 @@ mod tests {
     fn add_same_degree() {
 
         // add polynomials
-        let poly_1: Polynomial = Polynomial::new(vec![FieldElement::new(10), FieldElement::new(3), FieldElement::new(1)]);
-        let poly_2: Polynomial = Polynomial::new(vec![FieldElement::new(90), FieldElement::new(3), FieldElement::new(1)]);
+        let poly_1: Polynomial = Polynomial::new(vec![10, 3, 1]);
+        let poly_2: Polynomial = Polynomial::new(vec![90, 3, 1]);
         let poly = poly_1.clone() + poly_2.clone();
 
         // ensure correct
@@ -268,8 +266,8 @@ mod tests {
     fn sub_same_degree() {
 
         // add polynomials
-        let poly_1: Polynomial = Polynomial::new(vec![FieldElement::new(80), FieldElement::new(6), FieldElement::new(1)]);
-        let poly_2: Polynomial = Polynomial::new(vec![FieldElement::new(40), FieldElement::new(3), FieldElement::new(6)]);
+        let poly_1: Polynomial = Polynomial::new(vec![80, 6, 1]);
+        let poly_2: Polynomial = Polynomial::new(vec![40, 3, 6]);
         let poly = poly_1.clone() - poly_2.clone();
 
         println!("coeffs len: {}", poly.coeffs.len());
@@ -284,10 +282,8 @@ mod tests {
     fn sub_larger_lhs() {
 
         // add polynomials
-        let lhs: Polynomial = Polynomial::new(vec![
-            FieldElement::new(80), FieldElement::new(6), FieldElement::new(1), 
-            FieldElement::new(80), FieldElement::new(6), FieldElement::new(1)]);
-        let rhs: Polynomial = Polynomial::new(vec![FieldElement::new(40), FieldElement::new(3), FieldElement::new(6)]);
+        let lhs: Polynomial = Polynomial::new(vec![80, 6, 1, 80, 6, 1]);
+        let rhs: Polynomial = Polynomial::new(vec![40, 3, 6]);
         let poly = lhs.clone() - rhs.clone();
 
         // ensure correct
@@ -304,10 +300,8 @@ mod tests {
     fn sub_larger_rhs() {
 
         // add polynomials
-        let lhs: Polynomial = Polynomial::new(vec![FieldElement::new(40), FieldElement::new(3), FieldElement::new(6)]);
-        let rhs: Polynomial = Polynomial::new(vec![
-            FieldElement::new(80), FieldElement::new(6), FieldElement::new(1), 
-            FieldElement::new(80), FieldElement::new(6), FieldElement::new(1)]);
+        let lhs: Polynomial = Polynomial::new(vec![40, 3, 6]);
+        let rhs: Polynomial = Polynomial::new(vec![80, 6,1, 80, 6, 1]);
         let poly = lhs.clone() - rhs.clone();
 
         // ensure correct
@@ -323,16 +317,9 @@ mod tests {
     #[test]
     fn add_diff_degree() {
 
-        // field element coefficients
-        let coeffs_1: Vec<FieldElement> = vec![FieldElement::new(10), FieldElement::new(3), FieldElement::new(1)];
-        let coeffs_2: Vec<FieldElement> = vec![
-            FieldElement::new(1), FieldElement::new(2), FieldElement::new(3),
-            FieldElement::new(90), FieldElement::new(3), FieldElement::new(1)
-            ];
-
         // polynomials
-        let poly_1: Polynomial = Polynomial::new(coeffs_1);
-        let poly_2: Polynomial = Polynomial::new(coeffs_2);
+        let poly_1: Polynomial = Polynomial::new(vec![10, 3, 1]);
+        let poly_2: Polynomial = Polynomial::new(vec![1, 2, 3, 90, 3, 1]);
 
         // add them
         let poly = poly_1.clone() + poly_2.clone();
@@ -349,8 +336,8 @@ mod tests {
     #[test]
     fn mul_test() {
         // multiply, evaluate, and ensure correct
-        let poly_1: Polynomial = Polynomial::new(vec![FieldElement::new(10), FieldElement::new(1), FieldElement::new(0), FieldElement::new(1)]);
-        let poly_2: Polynomial = Polynomial::new(vec![FieldElement::new(3), FieldElement::new(1), FieldElement::new(17)]);
+        let poly_1: Polynomial = Polynomial::new(vec![10, 1, 0, 1]);
+        let poly_2: Polynomial = Polynomial::new(vec![3, 1, 17]);
         let poly = poly_1.clone() * poly_2.clone();
         let eval_poly = poly.eval(FieldElement::new(2));
 
@@ -361,7 +348,7 @@ mod tests {
     #[test]
     fn negate_test() {
         // negate, evaluate, and ensure correct
-        let poly: Polynomial = Polynomial::new(vec![FieldElement::new(10), FieldElement::new(3), FieldElement::new(1)]);
+        let poly: Polynomial = Polynomial::new(vec![10, 3, 1]);
         let neg_poly = -poly.clone();
         let eval_neg_poly = neg_poly.eval(FieldElement::new(9));
         assert_eq!(eval_neg_poly.value,  -838);
@@ -370,8 +357,8 @@ mod tests {
     #[test]
     fn div_test_1() {
         //setup
-        let a = Polynomial::new(vec![FieldElement::new(1), FieldElement::new(2)]);
-        let b = Polynomial::new(vec![FieldElement::new(1), FieldElement::new(1)]);
+        let a = Polynomial::new(vec![1, 2]);
+        let b = Polynomial::new(vec![1, 1]);
         let c = a.clone() * b.clone();
 
         // division
@@ -385,23 +372,19 @@ mod tests {
     #[test]
     fn div_test_2() {
         //setup
-        let a = Polynomial::new(vec!
-            [FieldElement::new(1), FieldElement::new(20), FieldElement::new(35),
-            FieldElement::new(-1460), FieldElement::new(-9396), FieldElement::new(-12960), FieldElement::new(0)]);
-        let b = Polynomial::new(vec![FieldElement::new(1), FieldElement::new(-7), FieldElement::new(-18)]);
+        let a = Polynomial::new(vec![1, 20, 35, -1460, -9396, -12960, 0]);
+        let b = Polynomial::new(vec![1, -7, -18]);
 
 
         let c = a.clone() / b.clone();
 
-        println!("{}", c);
-
-        // checksout in printout
+        println!("{}", c); // checksout in printout
     }
    
    
     #[test]
     fn eval_test(){
-        let poly = Polynomial::new(vec![FieldElement::new(10), FieldElement::new(3), FieldElement::new(1)]);
+        let poly = Polynomial::new(vec![10, 3, 1]);
         let out = poly.eval(FieldElement::new(2));
         assert_eq!(out.value,  47);
     }
