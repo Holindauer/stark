@@ -2,6 +2,11 @@ use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::fmt;
 use rand::Rng;
 
+/**
+ * @notice field.rs contains a finite field implementation for the modulus 3 * 2^30 + 1
+ * It contains a generate with value 5. 
+ */
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldElement{
@@ -22,14 +27,10 @@ pub fn generator() -> FieldElement{
 }
 
 // zero constructor
-pub fn zero() -> FieldElement{
-    new_field_element(0)
-}
+pub fn zero() -> FieldElement{ new_field_element(0) }
 
 // one constructor
-pub fn one() -> FieldElement{
-    new_field_element(1)
-}
+pub fn one() -> FieldElement{ new_field_element(1) }
 
 // addition
 impl Add for FieldElement {
