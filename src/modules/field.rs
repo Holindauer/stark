@@ -14,23 +14,77 @@ pub struct FieldElement{
     pub modulus: i128,
 }
 
-// creates new field element at value w/ prime mod 3 * 2^30 + 1
-pub fn new_field_element(input_value: i128) -> FieldElement{
-    let modulus: i128 = 3 * 2_i128.pow(30) + 1; 
-    let value: i128 = input_value % modulus;
-    FieldElement{value, modulus}
-}
-    
-// generator constructor
-pub fn generator() -> FieldElement{
-    new_field_element(5)
-}
+impl FieldElement {
 
-// zero constructor
-pub fn zero() -> FieldElement{ new_field_element(0) }
+    // constructor for field element at value w/ prime mod 3 * 2^30 + 1
+    pub fn new(input_value: i128) -> FieldElement{
+        let modulus: i128 = FieldElement::modulus();
+        let value: i128 = input_value % modulus;
+        FieldElement{value, modulus}
+    }
 
-// one constructor
-pub fn one() -> FieldElement{ new_field_element(1) }
+    // generator constructor
+    pub fn generator() -> FieldElement{ FieldElement::new(5) }
+
+    // modulus 
+    pub fn modulus() -> i128 { 3 * 2_i128.pow(30) + 1 }
+
+    // zero and one constructor 
+    pub fn zero() -> FieldElement{ FieldElement::new(0) }
+    pub fn one() -> FieldElement{ FieldElement::new(1) }
+
+    // exponentiation
+    pub fn pow(&self, exp: i128) -> FieldElement {
+
+        let mut base = self.clone();
+        let mut exp = exp.clone();
+        let mut result = FieldElement::one(); 
+
+        // exponentiation by repeated squaring
+        while exp > 0 {
+            if exp % 2 == 1 {
+                result = result * base;
+            }
+            base = base * base;
+            exp /= 2;
+        }
+        result 
+    }
+
+    // random field element
+    pub fn random(&self) -> FieldElement {
+        let mut rng = rand::thread_rng();
+        FieldElement::new(rng.gen_range(0..3221225472))
+    }
+
+    // multiplicative inverse
+    pub fn inverse(&self) -> FieldElement {
+        let mut t = 0;
+        let mut new_t = 1;
+        let mut r = self.modulus;
+        let mut new_r = self.value;
+        
+        while new_r != 0 {
+            let quotient = r / new_r;
+            (t, new_t) = (new_t, t - quotient * new_t);
+            (r, new_r) = (new_r, r - quotient * new_r);
+        }
+
+        if r > 1 { // This means `element.value` and `element.modulus` are not coprime
+            panic!("Element does not have an inverse");
+        }
+
+        // Ensure the result is positive
+        if t < 0 {
+            t += self.modulus;
+        }
+
+        FieldElement {
+            value: t,
+            modulus: self.modulus
+        }
+    }
+}
 
 // addition
 impl Add for FieldElement {
@@ -90,64 +144,9 @@ impl Div for FieldElement {
 
     // multiply by inverse then mod by prime
     fn div(self, other: FieldElement) -> FieldElement {
-        self * inverse(other)
+        self * other.inverse()
     }
 }
-
-// exponentiation
-pub fn power(base: FieldElement, exp: i128) -> FieldElement {
-
-    let mut base = base.clone();
-    let mut exp = exp.clone();
-    let mut result = one(); 
-
-    // exponentiation by repeated squaring
-    while exp > 0 {
-        if exp % 2 == 1 {
-            result = result * base;
-        }
-        base = base * base;
-        exp /= 2;
-    }
-
-    result 
-}
-
-// multiplicative inverse
-pub fn inverse(element: FieldElement) -> FieldElement {
-    let mut t = 0;
-    let mut new_t = 1;
-    let mut r = element.modulus;
-    let mut new_r = element.value;
-
-    while new_r != 0 {
-        let quotient = r / new_r;
-        (t, new_t) = (new_t, t - quotient * new_t);
-        (r, new_r) = (new_r, r - quotient * new_r);
-    }
-
-    if r > 1 { // This means `element.value` and `element.modulus` are not coprime
-        panic!("Element does not have an inverse");
-    }
-
-    // Ensure the result is positive
-    if t < 0 {
-        t += element.modulus;
-    }
-
-    FieldElement {
-        value: t,
-        modulus: element.modulus
-    }
-}
-
-
-// random element
-pub fn random() -> FieldElement {
-    let mut rng = rand::thread_rng();
-    new_field_element(rng.gen_range(0..3221225472))
-}
-
 
 // prints field element value
 impl fmt::Display for FieldElement {
@@ -166,16 +165,16 @@ mod tests {
 
     #[test]
     fn addition() {
-        let a = new_field_element(3221225472);
-        let b = new_field_element(10);
-        assert_eq!(a + b, new_field_element(9));
+        let a = FieldElement::new(3221225472);
+        let b = FieldElement::new(10);
+        assert_eq!(a + b, FieldElement::new(9));
     }
 
     #[test]
     fn subtraction() {
 
-        let a = new_field_element(3221225472);
-        let b = new_field_element(10);
+        let a = FieldElement::new(3221225472);
+        let b = FieldElement::new(10);
         let c = a - b;
         println!("{:?}", c);
 
@@ -190,15 +189,15 @@ mod tests {
         let random_number = rng.gen_range(1..3221225472); 
     
         // ensure multiplicative inverse works
-        let a = -new_field_element(random_number);
-        let c  = inverse(a);
-        assert_eq!(c * a, one());
+        let a = -FieldElement::new(random_number);
+        let c  = a.inverse();
+        assert_eq!(c * a, FieldElement::one());
     }
 
     #[test]
     fn test_pow() {
-        let a = new_field_element(2);
-        assert_eq!(power(a, 32).value, 2_i128.pow(32) % 3221225473);
+        let a = FieldElement::new(2);
+        assert_eq!(a.pow(32).value, 2_i128.pow(32) % 3221225473);
     }
 
 }

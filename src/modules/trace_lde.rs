@@ -7,8 +7,8 @@ pub fn fib_square_trace (x: i128) -> Vec<FieldElement> {
 
     // create vec adn add starting point
     let mut a: Vec<FieldElement> = Vec::new();
-    a.push(new_field_element(1));
-    a.push(new_field_element(x));
+    a.push(FieldElement::new(1));
+    a.push(FieldElement::new(x));
 
     while a.len() < 1023 {
         let last: FieldElement = *a.get(a.len()-1).unwrap();
@@ -22,10 +22,10 @@ pub fn fib_square_trace (x: i128) -> Vec<FieldElement> {
 pub fn poly_domain() -> Vec<FieldElement> {
 
     let mut domain: Vec<FieldElement> = Vec::new();
-    let gen: FieldElement = power(generator(), 3 * 2_i128.pow(20));
+    let gen: FieldElement = FieldElement::generator().pow( 3 * 2_i128.pow(20));
 
     for i in 0..1024 {
-        domain.push(power(gen, i));
+        domain.push(gen.pow(i));
     }
     domain
 }
