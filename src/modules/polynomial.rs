@@ -1,6 +1,6 @@
 use crate::modules::field::{*};
 use std::vec;
-use std::ops::{Add, Sub, Mul, Div};
+use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::fmt;
 
 /**
@@ -68,7 +68,20 @@ impl Add for Polynomial {
 
         Polynomial::new(res)
     }
+}
 
+// negation
+impl Neg for Polynomial {
+    type Output = Polynomial;
+
+    // negate by subtracting from zero
+    fn neg(self) -> Polynomial {   
+        let mut res: Vec<FieldElement> = vec![];
+        for coef in self.coeffs.iter() {
+            res.push(zero() - *coef);
+        }
+        Polynomial::new(res)
+    }
 }
 
 // prints polynomial formatted polynomial
@@ -86,13 +99,10 @@ impl fmt::Display for Polynomial {
 }
 
 
-
-
 // tests
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::Rng;
 
     #[test]
     fn add_same_degree() {
@@ -141,6 +151,16 @@ mod tests {
         assert_eq!(poly.coeffs.get(4).unwrap().value, 6);
         assert_eq!(poly.coeffs.get(5).unwrap().value, 2);
     }
+
+    #[test]
+    fn negate_test() {
+        // negate, evaluate, and ensure correct
+        let poly: Polynomial = Polynomial::new(vec![new_field_element(10), new_field_element(3), new_field_element(1)]);
+        let neg_poly = -poly.clone();
+        let eval_neg_poly = neg_poly.eval(new_field_element(9));
+        assert_eq!(eval_neg_poly.value,  -838);
+    }
+
 
     #[test]
     fn eval_test(){
