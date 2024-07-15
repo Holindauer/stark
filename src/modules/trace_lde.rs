@@ -1,5 +1,4 @@
 use crate::modules::field::{*};
-use std::vec;
 
 
 // agreed upon fibonacci square sequence program a_n+2 = (a_n+1)**2 + (a_n)**2

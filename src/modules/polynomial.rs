@@ -46,6 +46,56 @@ impl Polynomial {
         is_zero
     }
 
+    // Constructs a monomial x^degree with a specific coefficient
+    fn monomial(degree: usize, coefficient: FieldElement) -> Polynomial {
+        let mut coeffs = vec![FieldElement::zero(); degree + 1];
+        coeffs[0] = coefficient;  // Highest degree term
+        Polynomial { coeffs }
+    }
+
+    // Constructs the Lagrange basis polynomial for a given index i
+    fn lagrange_basis(x: &Vec<FieldElement>, i: usize) -> Polynomial {
+        let mut l = Polynomial::monomial(0, FieldElement::one());  // Start with 1
+
+        for j in 0..x.len() {
+            if i != j {
+                // (x - x_j)
+                let monomial = Polynomial::monomial(1, FieldElement::one());
+                let constant = Polynomial::new(vec![-x[j].value]);  // Use negation method from FieldElement
+                let num = monomial + constant;
+
+                // Divide by (x_i - x_j), ensure subtraction handles negatives correctly
+                let denom_diff = x[i] - x[j];
+                let denom = denom_diff.inverse();  // Should handle negative by wrapping around the modulus correctly
+
+                l = l * num;
+                l = l.scale(&denom);
+            }
+        }
+
+        l
+    }
+
+    // Performs Lagrange interpolation based on given x and y values
+    pub fn lagrange(x: Vec<FieldElement>, y: Vec<FieldElement>) -> Polynomial {
+        assert_eq!(x.len(), y.len(), "x and y must be the same length");
+
+        let n = x.len();
+        let mut p = Polynomial::new(vec![]); // Start with the zero polynomial
+
+        for i in 0..n {
+            let li = Polynomial::lagrange_basis(&x, i);
+            p = p + (li.scale(&y[i]));
+        }
+
+        p
+    }
+
+    // Scales all coefficients of the polynomial by a FieldElement
+    fn scale(&self, factor: &FieldElement) -> Polynomial {
+        let scaled_coeffs: Vec<FieldElement> = self.coeffs.iter().map(|&coeff| coeff * *factor).collect();
+        Polynomial::new(scaled_coeffs.iter().map(|x| x.value).collect())
+    }
 }
 
 // polynomial addition
@@ -247,6 +297,7 @@ impl fmt::Display for Polynomial {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::Rng;
 
     #[test]
     fn add_same_degree() {
@@ -260,7 +311,7 @@ mod tests {
         assert_eq!(poly.coeffs.get(0).unwrap().value, 100);
         assert_eq!(poly.coeffs.get(1).unwrap().value, 6);
         assert_eq!(poly.coeffs.get(2).unwrap().value, 2);
-    }
+        }
 
     #[test]
     fn sub_same_degree() {
@@ -275,7 +326,7 @@ mod tests {
         // ensure correct
         assert_eq!(poly.coeffs.get(0).unwrap().value, 40);
         assert_eq!(poly.coeffs.get(1).unwrap().value, 3);
-        assert_eq!(poly.coeffs.get(2).unwrap().value, -5);
+        assert_eq!(poly.coeffs.get(2).unwrap().value, FieldElement::modulus()-5);
     }
 
     #[test]
@@ -293,7 +344,7 @@ mod tests {
         assert_eq!(poly.coeffs.get(2).unwrap().value, 1);
         assert_eq!(poly.coeffs.get(3).unwrap().value, 40);
         assert_eq!(poly.coeffs.get(4).unwrap().value, 3);
-        assert_eq!(poly.coeffs.get(5).unwrap().value, -5);
+        assert_eq!(poly.coeffs.get(5).unwrap().value, FieldElement::modulus()-5);
     }
 
     #[test]
@@ -306,11 +357,11 @@ mod tests {
 
         // ensure correct
         assert_eq!(poly.coeffs.len(), 6);
-        assert_eq!(poly.coeffs.get(0).unwrap().value, -80);
-        assert_eq!(poly.coeffs.get(1).unwrap().value, -6);
-        assert_eq!(poly.coeffs.get(2).unwrap().value, -1);
-        assert_eq!(poly.coeffs.get(3).unwrap().value, -40);
-        assert_eq!(poly.coeffs.get(4).unwrap().value, -3);
+        assert_eq!(poly.coeffs.get(0).unwrap().value, FieldElement::modulus()-80);
+        assert_eq!(poly.coeffs.get(1).unwrap().value, FieldElement::modulus()-6);
+        assert_eq!(poly.coeffs.get(2).unwrap().value, FieldElement::modulus()-1);
+        assert_eq!(poly.coeffs.get(3).unwrap().value, FieldElement::modulus()-40);
+        assert_eq!(poly.coeffs.get(4).unwrap().value, FieldElement::modulus()-3);
         assert_eq!(poly.coeffs.get(5).unwrap().value, 5);
     }
 
@@ -351,7 +402,7 @@ mod tests {
         let poly: Polynomial = Polynomial::new(vec![10, 3, 1]);
         let neg_poly = -poly.clone();
         let eval_neg_poly = neg_poly.eval(FieldElement::new(9));
-        assert_eq!(eval_neg_poly.value,  -838);
+        assert_eq!(eval_neg_poly.value,  FieldElement::modulus()-838);
     }
 
     #[test]
@@ -381,12 +432,37 @@ mod tests {
         println!("{}", c); // checksout in printout
     }
    
-   
     #[test]
     fn eval_test(){
         let poly = Polynomial::new(vec![10, 3, 1]);
         let out = poly.eval(FieldElement::new(2));
         assert_eq!(out.value,  47);
+    }
+
+    #[test]
+    fn lagrange_test_fuzz() {
+
+        // get random x and y values
+        let mut rng = rand::thread_rng();
+        let mut x: Vec<FieldElement> = vec![];
+        let mut y: Vec<FieldElement> = vec![];
+        for i in 0..3 {
+            x.push(FieldElement::new(i));
+            y.push(FieldElement::new(rng.gen_range(1..100)));
+        }
+
+        // lagrange interpolation
+        let poly = Polynomial::lagrange(x.clone(), y.clone());
+
+        // eval 
+        let out_1 = poly.eval(FieldElement::new(x[0].value));        
+        let out_2 = poly.eval(FieldElement::new(x[1].value));
+        let out_3 = poly.eval(FieldElement::new(x[2].value));
+
+        // ensure correct
+        assert_eq!(out_1.value, y[0].value);
+        assert_eq!(out_2.value, y[1].value);
+        assert_eq!(out_3.value, y[2].value);   
     }
 }
 

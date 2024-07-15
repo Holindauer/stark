@@ -105,10 +105,11 @@ impl Sub for FieldElement {
 
     // subtract then mod by prime
     fn sub(self, other: FieldElement) -> FieldElement {
-        FieldElement{
-            value: (self.value - other.value) % self.modulus, 
-            modulus: self.modulus
+        let mut result = (self.value - other.value) % self.modulus;
+        if result < 0 {
+            result += self.modulus;
         }
+        FieldElement { value: result, modulus: self.modulus }
     }
 }
 
@@ -182,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn inverse_test() { 
+    fn inverse_test_fuzz() { 
 
         // get rand int within mod
         let mut rng = rand::thread_rng();
@@ -195,9 +196,37 @@ mod tests {
     }
 
     #[test]
+    fn invers_test_2() {
+        // Test with various non-zero elements
+        let test_values = vec![1, 2, 3, 5, 1234567, 3221225470]; // Various values, including near the modulus
+        for val in test_values {
+            let elem = FieldElement::new(val);
+            let inv = elem.inverse();
+            let product = elem * inv;
+
+            // Check if the product is 1 (multiplicative identity)
+            assert_eq!(product, FieldElement::one(), "Failed inverse test for value: {}", val);
+        }
+
+        // Optional: Test edge case for zero, which should not have an inverse
+        // Depending on how you want to handle this, this part might be different
+        let zero_elem = FieldElement::zero();
+        let result = std::panic::catch_unwind(|| zero_elem.inverse());
+        assert!(result.is_err(), "Inverse of zero did not panic as expected");
+    }
+
+    #[test]
     fn test_pow() {
         let a = FieldElement::new(2);
         assert_eq!(a.pow(32).value, 2_i128.pow(32) % 3221225473);
+    }
+
+
+    #[test]
+    fn test_negative_handling() {
+        let elem1 = FieldElement::new(2);
+        let elem2 = FieldElement::new(3);
+        assert_eq!((elem1 - elem2).value, FieldElement::modulus() - 1);
     }
 
 }
