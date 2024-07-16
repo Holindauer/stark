@@ -2,13 +2,16 @@ use crate::modules::field::{*};
 use std::vec;
 use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::fmt;
+use serde::{Serialize, Deserialize};
+use std::fs::File;
+use std::io::{self, Read, Write};
 
 /**
  * polynomial.rs implements polynomial operations, evaluation, and lagrange 
  * interpolation over the specific finite field implemented in field.rs
  */
 
- #[derive(Debug, Clone)]
+ #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Polynomial {
     pub coeffs: Vec<FieldElement>,
 }
@@ -27,7 +30,7 @@ impl Polynomial {
         // evaluate polynomial at x using Horner's method
         let mut val: i128 = 0;
         for coef in self.coeffs.iter() {
-            val = (val * x.value + coef.value) % x.modulus;
+            val = (val * x.value + coef.value) % FieldElement::modulus();
         }
         FieldElement::new(val)
     }
@@ -38,7 +41,7 @@ impl Polynomial {
     }
 
     // checks for zero polynomial
-    fn is_zero_poly(&self) -> bool {
+    pub fn is_zero_poly(&self) -> bool {
         let mut is_zero: bool = true;
         for i in 0..self.coeffs.len() {
             if self.coeffs.get(i).unwrap().value != 0 { is_zero = false; }
@@ -47,14 +50,14 @@ impl Polynomial {
     }
 
     // Constructs a monomial x^degree with a specific coefficient
-    fn monomial(degree: usize, coefficient: FieldElement) -> Polynomial {
+    pub fn monomial(degree: usize, coefficient: FieldElement) -> Polynomial {
         let mut coeffs = vec![FieldElement::zero(); degree + 1];
         coeffs[0] = coefficient;  // Highest degree term
         Polynomial { coeffs }
     }
 
     // Constructs the Lagrange basis polynomial for a given index i
-    fn lagrange_basis(x: &Vec<FieldElement>, i: usize) -> Polynomial {
+    pub fn lagrange_basis(x: &Vec<FieldElement>, i: usize) -> Polynomial {
         let mut l = Polynomial::monomial(0, FieldElement::one());  // Start with 1
 
         for j in 0..x.len() {
@@ -92,9 +95,26 @@ impl Polynomial {
     }
 
     // Scales all coefficients of the polynomial by a FieldElement
-    fn scale(&self, factor: &FieldElement) -> Polynomial {
+    pub fn scale(&self, factor: &FieldElement) -> Polynomial {
         let scaled_coeffs: Vec<FieldElement> = self.coeffs.iter().map(|&coeff| coeff * *factor).collect();
         Polynomial::new(scaled_coeffs.iter().map(|x| x.value).collect())
+    }
+
+    // Save the polynomial to a JSON file
+    pub fn save(&self, filename: &str) -> io::Result<()> {
+        let json = serde_json::to_string(&self).unwrap();
+        let mut file = File::create(filename)?;
+        file.write_all(json.as_bytes())?;
+        Ok(())
+    }
+
+    // Load a polynomial from a JSON file
+    pub fn load(filename: &str) -> io::Result<Polynomial> {
+        let mut file = File::open(filename)?;
+        let mut json = String::new();
+        file.read_to_string(&mut json)?;
+        let poly: Polynomial = serde_json::from_str(&json).unwrap();
+        Ok(poly)
     }
 }
 
