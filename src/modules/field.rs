@@ -1,6 +1,7 @@
 use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::fmt;
 use rand::Rng;
+use serde::{Serialize, Deserialize};
 
 /**
  * @notice field.rs contains a finite field implementation for the modulus 3 * 2^30 + 1
@@ -8,19 +9,17 @@ use rand::Rng;
  */
 
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FieldElement{
     pub value: i128,
-    pub modulus: i128,
 }
 
 impl FieldElement {
 
     // constructor for field element at value w/ prime mod 3 * 2^30 + 1
     pub fn new(input_value: i128) -> FieldElement{
-        let modulus: i128 = FieldElement::modulus();
-        let value: i128 = input_value % modulus;
-        FieldElement{value, modulus}
+        let value: i128 = input_value % FieldElement::modulus();
+        FieldElement{value}
     }
 
     // generator constructor
@@ -61,7 +60,7 @@ impl FieldElement {
     pub fn inverse(&self) -> FieldElement {
         let mut t = 0;
         let mut new_t = 1;
-        let mut r = self.modulus;
+        let mut r = FieldElement::modulus();
         let mut new_r = self.value;
         
         while new_r != 0 {
@@ -76,13 +75,10 @@ impl FieldElement {
 
         // Ensure the result is positive
         if t < 0 {
-            t += self.modulus;
+            t += FieldElement::modulus();
         }
 
-        FieldElement {
-            value: t,
-            modulus: self.modulus
-        }
+        FieldElement { value: t }
     }
 }
 
@@ -93,9 +89,7 @@ impl Add for FieldElement {
     // add then mod by prime
     fn add(self, other: FieldElement) -> FieldElement {
         FieldElement{
-            value: (self.value + other.value) % self.modulus, 
-            modulus: self.modulus
-        }
+            value: (self.value + other.value) % FieldElement::modulus(),}
     }
 }
 
@@ -105,11 +99,11 @@ impl Sub for FieldElement {
 
     // subtract then mod by prime
     fn sub(self, other: FieldElement) -> FieldElement {
-        let mut result = (self.value - other.value) % self.modulus;
+        let mut result = (self.value - other.value) % FieldElement::modulus();
         if result < 0 {
-            result += self.modulus;
+            result += FieldElement::modulus();
         }
-        FieldElement { value: result, modulus: self.modulus }
+        FieldElement { value: result  }
     }
 }
 
@@ -118,11 +112,11 @@ impl Neg for FieldElement {
     type Output = FieldElement;
 
     fn neg(self) -> FieldElement {
-        let mut result = self.modulus - self.value;
-        if result >= self.modulus {
-            result -= self.modulus;
+        let mut result = FieldElement::modulus() - self.value;
+        if result >= FieldElement::modulus() {
+            result -= FieldElement::modulus();
         }
-        FieldElement { value: result, modulus: self.modulus }
+        FieldElement { value: result }
     }
 }
 
@@ -132,10 +126,7 @@ impl Mul for FieldElement {
 
     // multiply then mod by prime
     fn mul(self, other: FieldElement) -> FieldElement {
-        FieldElement{
-            value: (self.value * other.value) % self.modulus, 
-            modulus: self.modulus
-        }
+        FieldElement{ value: (self.value * other.value) % FieldElement::modulus() }
     }
 }
 
@@ -153,7 +144,7 @@ impl Div for FieldElement {
 impl fmt::Display for FieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Simple modulo to ensure it's within range and non-negative
-        let value = (self.value % self.modulus + self.modulus) % self.modulus;
+        let value = (self.value % FieldElement::modulus() + FieldElement::modulus()) % FieldElement::modulus();
         write!(f, "{}", value)
     }
 }

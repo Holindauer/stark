@@ -35,7 +35,13 @@ fn main() {
     */
 
     // load pre evaluated polynomial for faster development
-    let f: Polynomial = Polynomial::load("lagrange_poly.txt").unwrap(); // NOTE: ensure in project rpp directory
+    let f: Polynomial = Polynomial::load("lagrange_poly.txt").unwrap(); // NOTE: ensure in project root directory
+
+    // evaluate over a coset, excluding the last element (Ensure this is right)
+    let coset: Vec<FieldElement> = domain.clone().into_iter().take(domain.len()-1).collect();
+
+    let coset_eval: Vec<FieldElement> = f.eval_domain(coset.clone());
+    println!("Coset eval length: {:?}", coset_eval);
 
 }
 

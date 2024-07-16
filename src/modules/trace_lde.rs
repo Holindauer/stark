@@ -1,7 +1,9 @@
 use crate::modules::field::{*};
+use crate::modules::polynomial::{*};
 
 
 // agreed upon fibonacci square sequence program a_n+2 = (a_n+1)**2 + (a_n)**2
+// this function accepts the second term and generates up until 1023 terms
 pub fn fib_square_trace (x: i128) -> Vec<FieldElement> {
 
     // create vec adn add starting point
@@ -23,7 +25,7 @@ pub fn poly_domain() -> Vec<FieldElement> {
     let mut domain: Vec<FieldElement> = Vec::new();
     let gen: FieldElement = FieldElement::generator().pow( 3 * 2_i128.pow(20));
 
-    for i in 0..1024 {
+    for i in 0..1023 {
         domain.push(gen.pow(i));
     }
     domain

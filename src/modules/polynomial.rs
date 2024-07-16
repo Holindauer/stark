@@ -35,6 +35,11 @@ impl Polynomial {
         FieldElement::new(val)
     }
 
+    // evaluate over a domain of field elements
+    pub fn eval_domain(&self, domain: Vec<FieldElement>) -> Vec<FieldElement> {
+        domain.iter().map(|x| self.eval(*x)).collect()
+    }
+
     // get degree of polynomial
     pub fn degree(&self) -> usize {
         self.coeffs.len() - 1
