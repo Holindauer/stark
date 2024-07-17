@@ -5,6 +5,10 @@ use std::fmt;
 use serde::{Serialize, Deserialize};
 use std::fs::File;
 use std::io::{self, Read, Write};
+use num_bigint::RandBigInt;
+use num_bigint::BigInt;
+use num_traits::{Zero, One};
+
 
 /**
  * polynomial.rs implements polynomial operations, evaluation, and lagrange 
@@ -20,24 +24,24 @@ pub struct Polynomial {
 impl Polynomial {
 
     // coefficients stored highest to lowest degree
-    pub fn new(coeffs: Vec<i128>) -> Self {
-        Polynomial { coeffs: coeffs.iter().map(|&x| FieldElement::new(x)).collect() }
+    pub fn new(coeffs: Vec<BigInt>) -> Self {
+        Polynomial { coeffs: coeffs.iter().map(|x| FieldElement::new(x.clone())).collect() }
     }
     
     // evaluate polynomial at field element x
     pub fn eval(&self, x: FieldElement) -> FieldElement {
 
         // evaluate polynomial at x using Horner's method
-        let mut val: i128 = 0;
+        let mut val: BigInt = BigInt::zero();
         for coef in self.coeffs.iter() {
-            val = (val * x.value + coef.value) % FieldElement::modulus();
+            val = (val * x.value.clone() + coef.value.clone()) % FieldElement::modulus();
         }
         FieldElement::new(val)
     }
 
     // evaluate over a domain of field elements
     pub fn eval_domain(&self, domain: Vec<FieldElement>) -> Vec<FieldElement> {
-        domain.iter().map(|x| self.eval(*x)).collect()
+        domain.iter().map(|x| self.eval(x.clone())).collect()
     }
 
     // get degree of polynomial
@@ -49,7 +53,7 @@ impl Polynomial {
     pub fn is_zero_poly(&self) -> bool {
         let mut is_zero: bool = true;
         for i in 0..self.coeffs.len() {
-            if self.coeffs.get(i).unwrap().value != 0 { is_zero = false; }
+            if self.coeffs.get(i).unwrap().value != BigInt::zero() { is_zero = false; }
         }
         is_zero
     }
@@ -69,11 +73,11 @@ impl Polynomial {
             if i != j {
                 // (x - x_j)
                 let monomial = Polynomial::monomial(1, FieldElement::one());
-                let constant = Polynomial::new(vec![-x[j].value]);  // Use negation method from FieldElement
+                let constant = Polynomial::new(vec![-x[j].value.clone()]);  // Use negation method from FieldElement
                 let num = monomial + constant;
 
                 // Divide by (x_i - x_j), ensure subtraction handles negatives correctly
-                let denom_diff = x[i] - x[j];
+                let denom_diff = x[i].clone() - x[j].clone();
                 let denom = denom_diff.inverse();  // Should handle negative by wrapping around the modulus correctly
 
                 l = l * num;
@@ -101,8 +105,8 @@ impl Polynomial {
 
     // Scales all coefficients of the polynomial by a FieldElement
     pub fn scale(&self, factor: &FieldElement) -> Polynomial {
-        let scaled_coeffs: Vec<FieldElement> = self.coeffs.iter().map(|&coeff| coeff * *factor).collect();
-        Polynomial::new(scaled_coeffs.iter().map(|x| x.value).collect())
+        let scaled_coeffs: Vec<FieldElement> = self.coeffs.iter().map(|coeff| coeff.clone() * factor.clone()).collect();
+        Polynomial::new(scaled_coeffs.iter().map(|x| x.value.clone()).collect())
     }
 
     // Save the polynomial to a JSON file
@@ -145,18 +149,18 @@ impl Add for Polynomial {
         // if max degree is different, add higher degrees first
         if diff_len > 0{
             for i in 0..diff_len {
-                res.push(*max_poly.coeffs.get(i).unwrap());
+                res.push(max_poly.coeffs.get(i).unwrap().clone());
             }
         }
         
         // then add together the remaining shared degrees elementwise
         for i in 0..min_poly.coeffs.len() {
-            let coeff_1: FieldElement = *max_poly.coeffs.get(diff_len+i).unwrap();
-            let coeff_2: FieldElement = *min_poly.coeffs.get(i).unwrap();
+            let coeff_1: FieldElement = max_poly.coeffs.get(diff_len+i).unwrap().clone();
+            let coeff_2: FieldElement = min_poly.coeffs.get(i).unwrap().clone();
             res.push(coeff_1 + coeff_2);
         }
 
-        Polynomial::new(res.iter().map(|x| x.value).collect())
+        Polynomial::new(res.iter().map(|x| x.value.clone()).collect())
     }
 }
 
@@ -182,7 +186,7 @@ impl Sub for Polynomial {
             // set max and min polynomials, and difference in length
             max_poly = rhs.clone(); min_poly = self.clone();
             diff_len = max_poly.coeffs.len() - min_poly.coeffs.len();
-            for i in 0..diff_len {res.push(FieldElement::zero() - *rhs.coeffs.get(i).unwrap()); }
+            for i in 0..diff_len {res.push(FieldElement::zero() - rhs.coeffs.get(i).unwrap().clone()); }
 
             // set offsets for degree union subtraction
             rhs_offset = diff_len; lhs_offset = 0;
@@ -195,7 +199,7 @@ impl Sub for Polynomial {
             diff_len = max_poly.coeffs.len() - min_poly.coeffs.len();
 
             // push lhs terms until poly degree union
-            for i in 0..diff_len {res.push(*max_poly.coeffs.get(i).unwrap()); }
+            for i in 0..diff_len {res.push(max_poly.coeffs.get(i).unwrap().clone()); }
 
             // set offsets for degree union subtraction
             rhs_offset = 0; lhs_offset = diff_len;
@@ -209,12 +213,12 @@ impl Sub for Polynomial {
         // sub remaining terms elementwise
         let union_len = min_poly.coeffs.len();
         for i in 0..union_len {
-            let rhs_coeff: FieldElement = *rhs.coeffs.get(rhs_offset+i).unwrap();
-            let lhs_coeff: FieldElement = *self.coeffs.get(lhs_offset+i).unwrap();
+            let rhs_coeff: FieldElement = rhs.coeffs.get(rhs_offset+i).unwrap().clone();
+            let lhs_coeff: FieldElement = self.coeffs.get(lhs_offset+i).unwrap().clone();
             res.push(lhs_coeff - rhs_coeff);
         }
 
-        Polynomial::new(res.iter().map(|x| x.value).collect())
+        Polynomial::new(res.iter().map(|x| x.value.clone()).collect())
     }
 }
 
@@ -230,11 +234,11 @@ impl Mul for Polynomial {
         // multiply polynomials by convolution
         for (i, c1) in self.coeffs.iter().enumerate() {
             for (j, c2) in rhs.coeffs.iter().enumerate() {
-                res[i + j] = res[i + j] + (*c1) * (*c2);
+                res[i + j] = res[i + j].clone() + c1.clone() * c2.clone();
             }
         }
 
-        Polynomial::new(res.iter().map(|x| x.value).collect())
+        Polynomial::new(res.iter().map(|x| x.value.clone()).collect())
     }
 }
 
@@ -246,9 +250,9 @@ impl Neg for Polynomial {
     fn neg(self) -> Polynomial {   
         let mut res: Vec<FieldElement> = vec![];
         for coef in self.coeffs.iter() {
-            res.push(FieldElement::zero() - *coef);
+            res.push(FieldElement::zero() - coef.clone());
         }
-        Polynomial::new(res.iter().map(|x| x.value).collect())
+        Polynomial::new(res.iter().map(|x| x.value.clone()).collect())
     }
 }
 
@@ -276,21 +280,21 @@ impl Div for Polynomial {
         for i in 0..=num_degree - denom_degree {
             if num[i] != FieldElement::zero() {
                 // Calculate the coefficient for the current term of the quotient
-                let coeff = num[i] / denom[0];
-                quotient[i] = coeff;
+                let coeff = num[i].clone() / denom[0].clone();
+                quotient[i] = coeff.clone();
 
                 // Subtract the appropriate multiple of the denominator from the numerator
-                for (j, &denom_coeff) in denom.iter().enumerate() {
+                for (j, denom_coeff) in denom.iter().enumerate() {
                     if i + j <= num_degree {
-                        num[i + j] = num[i+j] - coeff * denom_coeff;
+                        num[i + j] = num[i+j].clone() - coeff.clone() * denom_coeff.clone();
                     }
                 }
             }
         }
 
         // Remove leading zeros from the quotient and reverse back to normal order
-        while let Some(&last) = quotient.last() {
-            if last == FieldElement::zero() {
+        while let Some(last) = quotient.last() {
+            if last.clone() == FieldElement::zero() {
                 quotient.pop();
             } else {
                 break;
@@ -328,113 +332,113 @@ mod tests {
     fn add_same_degree() {
 
         // add polynomials
-        let poly_1: Polynomial = Polynomial::new(vec![10, 3, 1]);
-        let poly_2: Polynomial = Polynomial::new(vec![90, 3, 1]);
+        let poly_1: Polynomial = Polynomial::new(vec![BigInt::from(10), BigInt::from(3), BigInt::from(1)]);
+        let poly_2: Polynomial = Polynomial::new(vec![BigInt::from(90), BigInt::from(3), BigInt::from(1)]);
         let poly = poly_1.clone() + poly_2.clone();
 
         // ensure correct
-        assert_eq!(poly.coeffs.get(0).unwrap().value, 100);
-        assert_eq!(poly.coeffs.get(1).unwrap().value, 6);
-        assert_eq!(poly.coeffs.get(2).unwrap().value, 2);
+        assert_eq!(poly.coeffs.get(0).unwrap().value, BigInt::from(100));
+        assert_eq!(poly.coeffs.get(1).unwrap().value, BigInt::from(6));
+        assert_eq!(poly.coeffs.get(2).unwrap().value, BigInt::from(2));
         }
 
     #[test]
     fn sub_same_degree() {
 
         // add polynomials
-        let poly_1: Polynomial = Polynomial::new(vec![80, 6, 1]);
-        let poly_2: Polynomial = Polynomial::new(vec![40, 3, 6]);
+        let poly_1: Polynomial = Polynomial::new(vec![BigInt::from(80), BigInt::from(6), BigInt::from(1)]);
+        let poly_2: Polynomial = Polynomial::new(vec![BigInt::from(40), BigInt::from(3), BigInt::from(6)]);
         let poly = poly_1.clone() - poly_2.clone();
 
         println!("coeffs len: {}", poly.coeffs.len());
 
         // ensure correct
-        assert_eq!(poly.coeffs.get(0).unwrap().value, 40);
-        assert_eq!(poly.coeffs.get(1).unwrap().value, 3);
-        assert_eq!(poly.coeffs.get(2).unwrap().value, FieldElement::modulus()-5);
+        assert_eq!(poly.coeffs.get(0).unwrap().value, BigInt::from(40));
+        assert_eq!(poly.coeffs.get(1).unwrap().value, BigInt::from(3));
+        assert_eq!(poly.coeffs.get(2).unwrap().value, FieldElement::modulus()-BigInt::from(5));
     }
 
     #[test]
     fn sub_larger_lhs() {
 
         // add polynomials
-        let lhs: Polynomial = Polynomial::new(vec![80, 6, 1, 80, 6, 1]);
-        let rhs: Polynomial = Polynomial::new(vec![40, 3, 6]);
+        let lhs: Polynomial = Polynomial::new(vec![BigInt::from(80), BigInt::from(6), BigInt::from(1), BigInt::from(80), BigInt::from(6), BigInt::from(1)]);
+        let rhs: Polynomial = Polynomial::new(vec![BigInt::from(40), BigInt::from(3), BigInt::from(6)]);
         let poly = lhs.clone() - rhs.clone();
 
         // ensure correct
         assert_eq!(poly.coeffs.len(), 6);
-        assert_eq!(poly.coeffs.get(0).unwrap().value, 80);
-        assert_eq!(poly.coeffs.get(1).unwrap().value, 6);
-        assert_eq!(poly.coeffs.get(2).unwrap().value, 1);
-        assert_eq!(poly.coeffs.get(3).unwrap().value, 40);
-        assert_eq!(poly.coeffs.get(4).unwrap().value, 3);
-        assert_eq!(poly.coeffs.get(5).unwrap().value, FieldElement::modulus()-5);
+        assert_eq!(poly.coeffs.get(0).unwrap().value, BigInt::from(80));
+        assert_eq!(poly.coeffs.get(1).unwrap().value, BigInt::from(6));
+        assert_eq!(poly.coeffs.get(2).unwrap().value, BigInt::from(1));
+        assert_eq!(poly.coeffs.get(3).unwrap().value, BigInt::from(40));
+        assert_eq!(poly.coeffs.get(4).unwrap().value, BigInt::from(3));
+        assert_eq!(poly.coeffs.get(5).unwrap().value, FieldElement::modulus()-BigInt::from(5));
     }
 
     #[test]
     fn sub_larger_rhs() {
 
         // add polynomials
-        let lhs: Polynomial = Polynomial::new(vec![40, 3, 6]);
-        let rhs: Polynomial = Polynomial::new(vec![80, 6,1, 80, 6, 1]);
+        let lhs: Polynomial = Polynomial::new(vec![BigInt::from(40), BigInt::from(3), BigInt::from(6)]);
+        let rhs: Polynomial = Polynomial::new(vec![BigInt::from(80), BigInt::from(6),BigInt::from(1), BigInt::from(80), BigInt::from(6), BigInt::from(1)]);
         let poly = lhs.clone() - rhs.clone();
 
         // ensure correct
         assert_eq!(poly.coeffs.len(), 6);
-        assert_eq!(poly.coeffs.get(0).unwrap().value, FieldElement::modulus()-80);
-        assert_eq!(poly.coeffs.get(1).unwrap().value, FieldElement::modulus()-6);
-        assert_eq!(poly.coeffs.get(2).unwrap().value, FieldElement::modulus()-1);
-        assert_eq!(poly.coeffs.get(3).unwrap().value, FieldElement::modulus()-40);
-        assert_eq!(poly.coeffs.get(4).unwrap().value, FieldElement::modulus()-3);
-        assert_eq!(poly.coeffs.get(5).unwrap().value, 5);
+        assert_eq!(poly.coeffs.get(0).unwrap().value, FieldElement::modulus()-BigInt::from(80));
+        assert_eq!(poly.coeffs.get(1).unwrap().value, FieldElement::modulus()-BigInt::from(6));
+        assert_eq!(poly.coeffs.get(2).unwrap().value, FieldElement::modulus()-BigInt::from(1));
+        assert_eq!(poly.coeffs.get(3).unwrap().value, FieldElement::modulus()-BigInt::from(40));
+        assert_eq!(poly.coeffs.get(4).unwrap().value, FieldElement::modulus()-BigInt::from(3));
+        assert_eq!(poly.coeffs.get(5).unwrap().value, BigInt::from(5));
     }
 
     #[test]
     fn add_diff_degree() {
 
         // polynomials
-        let poly_1: Polynomial = Polynomial::new(vec![10, 3, 1]);
-        let poly_2: Polynomial = Polynomial::new(vec![1, 2, 3, 90, 3, 1]);
+        let poly_1: Polynomial = Polynomial::new(vec![BigInt::from(10), BigInt::from(3), BigInt::from(1)]);
+        let poly_2: Polynomial = Polynomial::new(vec![BigInt::from(1), BigInt::from(2), BigInt::from(3), BigInt::from(90), BigInt::from(3), BigInt::from(1)]);
 
         // add them
         let poly = poly_1.clone() + poly_2.clone();
 
         // ensure correct
-        assert_eq!(poly.coeffs.get(0).unwrap().value, 1);
-        assert_eq!(poly.coeffs.get(1).unwrap().value, 2);
-        assert_eq!(poly.coeffs.get(2).unwrap().value, 3);
-        assert_eq!(poly.coeffs.get(3).unwrap().value, 100);
-        assert_eq!(poly.coeffs.get(4).unwrap().value, 6);
-        assert_eq!(poly.coeffs.get(5).unwrap().value, 2);
+        assert_eq!(poly.coeffs.get(0).unwrap().value, BigInt::from(1));
+        assert_eq!(poly.coeffs.get(1).unwrap().value, BigInt::from(2));
+        assert_eq!(poly.coeffs.get(2).unwrap().value, BigInt::from(3));
+        assert_eq!(poly.coeffs.get(3).unwrap().value, BigInt::from(100));
+        assert_eq!(poly.coeffs.get(4).unwrap().value, BigInt::from(6));
+        assert_eq!(poly.coeffs.get(5).unwrap().value, BigInt::from(2));
     }
 
     #[test]
     fn mul_test() {
         // multiply, evaluate, and ensure correct
-        let poly_1: Polynomial = Polynomial::new(vec![10, 1, 0, 1]);
-        let poly_2: Polynomial = Polynomial::new(vec![3, 1, 17]);
+        let poly_1: Polynomial = Polynomial::new(vec![BigInt::from(10), BigInt::from(1), BigInt::from(0), BigInt::from(1)]);
+        let poly_2: Polynomial = Polynomial::new(vec![BigInt::from(3), BigInt::from(1), BigInt::from(17)]);
         let poly = poly_1.clone() * poly_2.clone();
-        let eval_poly = poly.eval(FieldElement::new(2));
+        let eval_poly = poly.eval(FieldElement::new(BigInt::from(2)));
 
         // ensure correct
-        assert_eq!(eval_poly.value,  2635);
+        assert_eq!(eval_poly.value,  BigInt::from(2635));
     }
 
     #[test]
     fn negate_test() {
         // negate, evaluate, and ensure correct
-        let poly: Polynomial = Polynomial::new(vec![10, 3, 1]);
+        let poly: Polynomial = Polynomial::new(vec![BigInt::from(10), BigInt::from(3), BigInt::from(1)]);
         let neg_poly = -poly.clone();
-        let eval_neg_poly = neg_poly.eval(FieldElement::new(9));
+        let eval_neg_poly = neg_poly.eval(FieldElement::new(BigInt::from(9)));
         assert_eq!(eval_neg_poly.value,  FieldElement::modulus()-838);
     }
 
     #[test]
     fn div_test_1() {
         //setup
-        let a = Polynomial::new(vec![1, 2]);
-        let b = Polynomial::new(vec![1, 1]);
+        let a = Polynomial::new(vec![BigInt::from(1), BigInt::from(2)]);
+        let b = Polynomial::new(vec![BigInt::from(1), BigInt::from(1)]);
         let c = a.clone() * b.clone();
 
         // division
@@ -448,8 +452,8 @@ mod tests {
     #[test]
     fn div_test_2() {
         //setup
-        let a = Polynomial::new(vec![1, 20, 35, -1460, -9396, -12960, 0]);
-        let b = Polynomial::new(vec![1, -7, -18]);
+        let a = Polynomial::new(vec![BigInt::from(1), BigInt::from(20), BigInt::from(35), BigInt::from(-1460), BigInt::from(-9396), BigInt::from(-12960), BigInt::from(0)]);
+        let b = Polynomial::new(vec![BigInt::from(1), BigInt::from(-7), BigInt::from(-18)]);
 
 
         let c = a.clone() / b.clone();
@@ -459,9 +463,9 @@ mod tests {
    
     #[test]
     fn eval_test(){
-        let poly = Polynomial::new(vec![10, 3, 1]);
-        let out = poly.eval(FieldElement::new(2));
-        assert_eq!(out.value,  47);
+        let poly = Polynomial::new(vec![BigInt::from(10), BigInt::from(3), BigInt::from(1)]);
+        let out = poly.eval(FieldElement::new(BigInt::from(2)));
+        assert_eq!(out.value,  BigInt::from(47));
     }
 
     #[test]
@@ -472,17 +476,20 @@ mod tests {
         let mut x: Vec<FieldElement> = vec![];
         let mut y: Vec<FieldElement> = vec![];
         for i in 0..3 {
-            x.push(FieldElement::new(i));
-            y.push(FieldElement::new(rng.gen_range(1..100)));
+            x.push(FieldElement::new(BigInt::from(i)));
+
+            let upper_bound = FieldElement::modulus();
+            let random_value = rng.gen_bigint_range(&BigInt::zero(), &upper_bound);
+            y.push(FieldElement::new(random_value));
         }
 
         // lagrange interpolation
         let poly = Polynomial::lagrange(x.clone(), y.clone());
 
         // eval 
-        let out_1 = poly.eval(FieldElement::new(x[0].value));        
-        let out_2 = poly.eval(FieldElement::new(x[1].value));
-        let out_3 = poly.eval(FieldElement::new(x[2].value));
+        let out_1 = poly.eval(FieldElement::new(x[0].value.clone()));        
+        let out_2 = poly.eval(FieldElement::new(x[1].value.clone()));
+        let out_3 = poly.eval(FieldElement::new(x[2].value.clone()));
 
         // ensure correct
         assert_eq!(out_1.value, y[0].value);
