@@ -24,7 +24,7 @@ pub fn poly_domain() -> Vec<FieldElement> {
 
     let mut domain: Vec<FieldElement> = Vec::new();
     let gen: FieldElement = FieldElement::generator().pow( 3 * 2_i128.pow(20));
-    for i in 0..1024 { domain.push(gen.pow(i)); }
+    for i in 0..1023 { domain.push(gen.pow(i)); }
     domain
 }
 
@@ -35,21 +35,18 @@ pub fn extended_domain() -> Vec<FieldElement> {
 
     // get generator 
     let w = FieldElement::generator();
-    println!("h: {}", w.value);
-
-    println!("power: {}", 3 * 2_i128.pow(30) / 8192);
-
     let h = w.pow((3 * 2_i128.pow(30)) / 8192); // 8192 / 8 = 1024
     println!("h: {}", h.value);
     
     let mut H: Vec<FieldElement> = Vec::new();
-    for i in 0..8192 { H.push(h.pow(i)); }
+    for i in 0..8192 { H.push(h.pow(i) * w); }
 
-    let mut domain: Vec<FieldElement> = Vec::new();
-    for i in 0..8192 { domain.push(w * *H.get(i).unwrap()); }
+    // let mut domain: Vec<FieldElement> = Vec::new();
+    // for i in 0..8192 { domain.push(w * *H.get(i).unwrap()); }
 
 
-    domain
+    // domain
+    H
 
 }
 
@@ -83,10 +80,20 @@ mod tests {
         let extended_domain: Vec<FieldElement> = extended_domain();
         assert_eq!(extended_domain.get(0).unwrap().value, 5);
         assert_eq!(extended_domain.get(extended_domain.len()-1).unwrap().value, 1375380442);
+
+        // additional tests
+        let w = FieldElement::generator();
+        let w_inv = FieldElement::generator().inverse();
+        assert_eq!(w_inv.value, 1932735284);
+
+        for i in  0..8192 {
+            assert_eq!(
+                (((w_inv * extended_domain[1]).pow(i)) * w),   // w^-1 * h^i * w = h^i
+                *extended_domain.get(i as usize).unwrap()      // h^i
+            );
+
+        }   
     }
-
-
-
 
 
 }
