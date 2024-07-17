@@ -46,7 +46,17 @@ impl Polynomial {
 
     // get degree of polynomial
     pub fn degree(&self) -> usize {
-        self.coeffs.len() - 1
+        let mut degree = self.coeffs.len() - 1;
+        let zero = FieldElement::zero();
+        for i in 0..self.coeffs.len(){
+            let next_deg = self.coeffs.get(self.coeffs.len() - (1 + i)).unwrap();
+            if  *next_deg == zero {
+                degree = degree - 1;
+            }
+            else { break; }
+        }
+        degree
+        // self.coeffs.len() - (1 as usize)
     }
 
     // checks for zero polynomial
@@ -129,7 +139,7 @@ impl Polynomial {
 
     // vanishing polynomial (x - c_1)(x - c_2) . . . (c - c_n)
     pub fn vanishing_polynomial(domain: Vec<BigInt>) -> Polynomial {
-
+        
         let x = Polynomial::new(vec![BigInt::from(1), BigInt::from(0)]);
         let mut acc = Polynomial::new(vec![BigInt::from(1)]);
         for d in domain {
@@ -139,7 +149,36 @@ impl Polynomial {
         acc
     }
 
+    // test for colinearity
+    pub fn test_colinearity(points: Vec<(BigInt, BigInt)>) -> bool {
+
+        let mut domain: Vec<FieldElement> = vec![];
+        let mut values: Vec<FieldElement> = vec![];
+
+        for (x, y) in points { 
+            domain.push(FieldElement::new(x));
+            values.push(FieldElement::new(y));
+        } 
+
+        let poly = Polynomial::lagrange(domain, values);
+        println!("{}", poly);
+        println!("{}", poly.degree());
+        if poly.degree() <= 1{ true } else { false }
+    }
+
 }
+
+
+/**
+
+def test_colinearity( points ):
+    domain = [p[0] for p in points]
+    values = [p[1] for p in points]
+    polynomial = Polynomial.interpolate_domain(domain, values)
+    return polynomial.degree() <= 1
+
+
+ */
 
 // polynomial addition
 impl Add for Polynomial {
@@ -242,8 +281,8 @@ impl Mul for Polynomial {
 
     fn mul(self, rhs: Polynomial) -> Polynomial {
        
-        // init result coeffs vec with self.degree + rhs.degree + 1 zero() elements
-        let mut res: Vec<FieldElement> = vec![FieldElement::zero(); self.degree() + rhs.degree() + 1];    
+        // init result coeffs vec with (combined poly coef len - 2) + 1 zero() elements
+        let mut res: Vec<FieldElement> = vec![FieldElement::zero(); self.coeffs.len() + rhs.coeffs.len() - 1];    
 
         // multiply polynomials by convolution
         for (i, c1) in self.coeffs.iter().enumerate() {
@@ -379,6 +418,20 @@ mod tests {
             let eval = vanish_poly.eval(FieldElement::new(x.clone()));
             assert_eq!(eval.value, BigInt::from(0));
         } 
+    }
+
+    #[test] 
+    fn test_test_colinearity(){
+
+        let points = vec![
+            (BigInt::from(0), BigInt::from(0)),
+            (BigInt::from(1), BigInt::from(1)),
+            (BigInt::from(2), BigInt::from(2)),
+        ];
+
+
+        let test = Polynomial::test_colinearity(points);
+        assert_eq!(test, true);
     }
 
     #[test]
