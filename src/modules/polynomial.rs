@@ -15,7 +15,7 @@ use num_traits::{Zero, One};
  * interpolation over the specific finite field implemented in field.rs
  */
 
- #[derive(Debug, Clone, Serialize, Deserialize)]
+ #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Polynomial {
     pub coeffs: Vec<FieldElement>,
 }
@@ -125,6 +125,20 @@ impl Polynomial {
         let poly: Polynomial = serde_json::from_str(&json).unwrap();
         Ok(poly)
     }
+
+
+    // vanishing polynomial (x - c_1)(x - c_2) . . . (c - c_n)
+    pub fn vanishing_polynomial(domain: Vec<BigInt>) -> Polynomial {
+
+        let x = Polynomial::new(vec![BigInt::from(1), BigInt::from(0)]);
+        let mut acc = Polynomial::new(vec![BigInt::from(1)]);
+        for d in domain {
+            acc = acc * (x.clone() - Polynomial::new(vec![d.clone()])); 
+        }
+
+        acc
+    }
+
 }
 
 // polynomial addition
@@ -329,7 +343,46 @@ mod tests {
     use rand::Rng;
 
     #[test]
-    fn add_same_degree() {
+    fn test_distributivity() {
+        let zero = BigInt::from(0);
+        let one = BigInt::from(1);
+        let two = BigInt::from(2);
+        let five = BigInt::from(5);
+
+        let a = Polynomial::new(vec![zero.clone(), one.clone(), two.clone()]);
+        let b = Polynomial::new(vec![two.clone(), two.clone(), one.clone()]);
+        let c = Polynomial::new(vec![zero.clone(), five.clone(), two.clone(), five.clone(), five.clone(), one.clone()]);
+
+        let lhs = a.clone() * (b.clone() + c.clone());
+        let rhs = a.clone() * b.clone() + a.clone() * c.clone();
+
+        assert_eq!(lhs, rhs);
+    }
+
+    #[test] 
+    fn test_vanishing_polynomial_fuzz(){
+
+        // randomly set vanishing points
+        let mut rng = rand::thread_rng();
+        let mut vanish_at: Vec<BigInt> = vec![];
+        for i in 0..10 {
+            let upper_bound = FieldElement::modulus();
+            let random_value = rng.gen_bigint_range(&BigInt::zero(), &upper_bound);
+            vanish_at.push(random_value);
+        }
+
+        // create vanishing polynomial
+        let vanish_poly = Polynomial::vanishing_polynomial(vanish_at.clone());
+
+        // check all zero
+        for x in vanish_at{
+            let eval = vanish_poly.eval(FieldElement::new(x.clone()));
+            assert_eq!(eval.value, BigInt::from(0));
+        } 
+    }
+
+    #[test]
+    fn test_add_same_degree() {
 
         // add polynomials
         let poly_1: Polynomial = Polynomial::new(vec![BigInt::from(10), BigInt::from(3), BigInt::from(1)]);
@@ -343,7 +396,7 @@ mod tests {
         }
 
     #[test]
-    fn sub_same_degree() {
+    fn test_sub_same_degree() {
 
         // add polynomials
         let poly_1: Polynomial = Polynomial::new(vec![BigInt::from(80), BigInt::from(6), BigInt::from(1)]);
@@ -359,7 +412,7 @@ mod tests {
     }
 
     #[test]
-    fn sub_larger_lhs() {
+    fn test_sub_larger_lhs() {
 
         // add polynomials
         let lhs: Polynomial = Polynomial::new(vec![BigInt::from(80), BigInt::from(6), BigInt::from(1), BigInt::from(80), BigInt::from(6), BigInt::from(1)]);
@@ -377,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn sub_larger_rhs() {
+    fn test_sub_larger_rhs() {
 
         // add polynomials
         let lhs: Polynomial = Polynomial::new(vec![BigInt::from(40), BigInt::from(3), BigInt::from(6)]);
@@ -395,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    fn add_diff_degree() {
+    fn test_add_diff_degree() {
 
         // polynomials
         let poly_1: Polynomial = Polynomial::new(vec![BigInt::from(10), BigInt::from(3), BigInt::from(1)]);
@@ -414,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn mul_test() {
+    fn test_mul() {
         // multiply, evaluate, and ensure correct
         let poly_1: Polynomial = Polynomial::new(vec![BigInt::from(10), BigInt::from(1), BigInt::from(0), BigInt::from(1)]);
         let poly_2: Polynomial = Polynomial::new(vec![BigInt::from(3), BigInt::from(1), BigInt::from(17)]);
@@ -426,7 +479,7 @@ mod tests {
     }
 
     #[test]
-    fn negate_test() {
+    fn test_negate() {
         // negate, evaluate, and ensure correct
         let poly: Polynomial = Polynomial::new(vec![BigInt::from(10), BigInt::from(3), BigInt::from(1)]);
         let neg_poly = -poly.clone();
@@ -435,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn div_test_1() {
+    fn test_div_1() {
         //setup
         let a = Polynomial::new(vec![BigInt::from(1), BigInt::from(2)]);
         let b = Polynomial::new(vec![BigInt::from(1), BigInt::from(1)]);
@@ -450,26 +503,24 @@ mod tests {
     }
 
     #[test]
-    fn div_test_2() {
+    fn test_div_2() {
         //setup
         let a = Polynomial::new(vec![BigInt::from(1), BigInt::from(20), BigInt::from(35), BigInt::from(-1460), BigInt::from(-9396), BigInt::from(-12960), BigInt::from(0)]);
         let b = Polynomial::new(vec![BigInt::from(1), BigInt::from(-7), BigInt::from(-18)]);
-
-
         let c = a.clone() / b.clone();
 
         println!("{}", c); // checksout in printout
     }
    
     #[test]
-    fn eval_test(){
+    fn test_eval(){
         let poly = Polynomial::new(vec![BigInt::from(10), BigInt::from(3), BigInt::from(1)]);
         let out = poly.eval(FieldElement::new(BigInt::from(2)));
         assert_eq!(out.value,  BigInt::from(47));
     }
 
     #[test]
-    fn lagrange_test_fuzz() {
+    fn test_fuzz_lagrange() {
 
         // get random x and y values
         let mut rng = rand::thread_rng();
