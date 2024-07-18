@@ -6,7 +6,7 @@ use num_bigint::BigInt;
 use num_traits::{Zero, One};
 use std::ops::{Add, Sub, Mul, Neg};
 
-
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct MPolynomial {
     /**
         Multivariate polynomials are represented as dictionaries with exponents
@@ -31,8 +31,27 @@ impl MPolynomial {
         MPolynomial { dict: HashMap::new() }
     }
 
-    pub fn is_zero(self) -> bool {
-        self.dict.is_empty()
+    pub fn is_zero(&self) -> bool {
+        self.dict.values().all(FieldElement::is_zero)
+    }
+
+    // exponentiation by squaring
+    pub fn pow(self, exponent: usize) -> Self {
+        if self.is_zero() { return MPolynomial::zero(); } // 0^n = 0
+
+        // FieldElement has a method `one()` that returns the multiplicative identity element
+        let field_one = FieldElement::one();
+        let num_variables = self.dict.keys().next().unwrap().len(); // Assuming dictionary is not empty
+        let mut acc = MPolynomial { dict: HashMap::from([(vec![0; num_variables], field_one)]) };
+
+        for b in format!("{:b}", exponent).chars() {
+            acc = acc.clone() * acc; // Square the accumulator
+            if b == '1' {
+                acc = acc.clone() * self.clone(); // Multiply by self if the bit is 1
+            }
+        }
+
+        acc
     }
 
 

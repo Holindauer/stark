@@ -18,7 +18,7 @@ impl FieldElement {
     }
 
     // generator constructor
-    pub fn generator() -> FieldElement { FieldElement::new(BigInt::from(5)) }
+    pub fn generator() -> FieldElement { FieldElement::new(BigInt::from(85408008396924667383611388730472331217 as i128)) }
 
     // prime modulus of 1 + 407 * 2^119
     pub fn modulus() -> BigInt { BigInt::from(407) * (BigInt::from(2).pow(119)) + 1 }
@@ -26,6 +26,9 @@ impl FieldElement {
     // zero and one constructors
     pub fn zero() -> FieldElement { FieldElement::new(BigInt::zero()) }
     pub fn one() -> FieldElement { FieldElement::new(BigInt::one()) }
+
+    // check if field element is zero
+    pub fn is_zero(&self) -> bool { self.value.is_zero() }
 
     // exponentiation
     pub fn pow(&self, exp: i128) -> FieldElement {
@@ -132,14 +135,14 @@ mod tests {
     use rand::Rng;
 
     #[test]
-    fn addition() {
+    fn test_addition() {
         let a = FieldElement::new(FieldElement::modulus() - 1.to_bigint().unwrap());
         let b = FieldElement::new(10.to_bigint().unwrap());
         assert_eq!(a + b, FieldElement::new(9.to_bigint().unwrap()));
     }
 
     #[test]
-    fn subtraction() {
+    fn test_subtraction() {
         let a = FieldElement::new(FieldElement::modulus() - 1.to_bigint().unwrap());
         let b = FieldElement::new(10.to_bigint().unwrap());
         let c = a - b;
@@ -150,7 +153,7 @@ mod tests {
     }
 
     #[test]
-    fn test_inverse() {
+    fn test_inverse_1() {
         let elem = FieldElement::new(3.to_bigint().unwrap());
         let inv_elem = elem.inverse();
         let one_elem = FieldElement::new(1.to_bigint().unwrap());
@@ -158,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn inverse_test_2() {
+    fn test_inverse_2() {
         let test_values: Vec<i128> = vec![1, 2, 3, 5, 1234567, 3221225470];
         for val in test_values {
             let elem = FieldElement::new(val.to_bigint().unwrap());
@@ -176,7 +179,7 @@ mod tests {
     #[test]
     fn test_pow() {
         let a = FieldElement::new(2.to_bigint().unwrap());
-        let expected_value = (2.to_bigint().unwrap().pow(32) % FieldElement::modulus());
+        let expected_value = 2.to_bigint().unwrap().pow(32) % FieldElement::modulus();
         assert_eq!(a.pow(32).value, expected_value);
     }
 
