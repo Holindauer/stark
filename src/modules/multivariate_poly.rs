@@ -36,6 +36,27 @@ impl MPolynomial {
     // checks
     pub fn is_zero(&self) -> bool { self.dict.values().all(FieldElement::is_zero) }
 
+        /// Evaluates the polynomial at a given point (a vector of field elements)
+    pub fn evaluate(&self, point: &[FieldElement]) -> FieldElement {
+
+        // accumulate the result by iterating over the terms in the dictionary
+        let mut acc = FieldElement::zero();  
+        for (exponents, coeff) in &self.dict {
+            let mut prod = coeff.clone();
+            for (i, &exponent) in exponents.iter().enumerate() {
+
+                // multiply the term by the corresponding variable raised to the exponent
+                let mut term = point[i].clone();
+                for _ in 1..exponent {
+                    term = term.clone() * point[i].clone();
+                }
+                prod = prod.clone() * term;
+            }
+            acc = acc.clone() + prod;
+        }
+        acc
+    }
+
     // efficient exponentiation by squaring
     pub fn pow(self, exponent: usize) -> Self {
         if self.is_zero() { return MPolynomial::zero(); } // 0^n = 0
