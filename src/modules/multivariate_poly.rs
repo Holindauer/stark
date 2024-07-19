@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use num_bigint::RandBigInt;
 use num_bigint::BigInt;
 use num_traits::{Zero, One};
+use num_traits::ToPrimitive;
 use std::ops::{Add, Sub, Mul, Neg};
 
 /**
@@ -36,30 +37,44 @@ impl MPolynomial {
     // checks
     pub fn is_zero(&self) -> bool { self.dict.values().all(FieldElement::is_zero) }
 
-        /// Evaluates the polynomial at a given point (a vector of field elements)
-    pub fn evaluate(&self, point: &[FieldElement]) -> FieldElement {
-
-        // accumulate the result by iterating over the terms in the dictionary
+    /// Evaluates the polynomial at a given point (a vector of field elements)
+    /// by accumulating the product of each term's coefficient and the point
+    pub fn eval(&self, point: &[FieldElement]) -> FieldElement {
         let mut acc = FieldElement::zero();  
         for (exponents, coeff) in &self.dict {
             let mut prod = coeff.clone();
-            for (i, &exponent) in exponents.iter().enumerate() {
 
-                // multiply the term by the corresponding variable raised to the exponent
-                let mut term = point[i].clone();
-                for _ in 1..exponent {
-                    term = term.clone() * point[i].clone();
-                }
+
+            for (i, &exponent) in exponents.iter().enumerate() {
+                // handle cases where point does not cover all variables
+                if i >= point.len() { continue; }
+                
+                let mut term = if exponent == 0 {
+                    FieldElement::one() // c^0 = 1
+                } else {   
+
+                    // calculate the term by raising the point to the exponent
+                    let base = &point[i];
+                    let mut term = base.clone();
+                    for _ in 1..exponent {
+                        term = term.clone() * base.clone();
+                    }
+                    term
+                };
+
+                // multiply the term by the accumulated product
                 prod = prod.clone() * term;
             }
+            // add the product to the accumulator
             acc = acc.clone() + prod;
         }
         acc
-    }
+}
 
     // efficient exponentiation by squaring
     pub fn pow(self, exponent: usize) -> Self {
         if self.is_zero() { return MPolynomial::zero(); } // 0^n = 0
+        if exponent == 0 { return MPolynomial::constant(1); } // c^0 = 1
 
         // FieldElement has a method `one()` that returns the multiplicative identity element
         let field_one = FieldElement::one();
@@ -98,7 +113,21 @@ impl MPolynomial {
         variables
     }
 
+    /// Lifts a univariate polynomial into a multivariate polynomial context.
+    pub fn lift(poly: &Polynomial, variable_index: usize) -> Self {
+        if poly.is_zero() { return MPolynomial::zero(); }
 
+        let variables = MPolynomial::variables(variable_index + 1);
+        let x = variables[variable_index].clone();  // Assuming variables returns a vector of MPolynomial
+        let mut acc = MPolynomial::zero();
+
+        for (i, coeff) in poly.coeffs.iter().rev().enumerate() {
+            let coeff_val: i128 = coeff.value.clone().to_i128().unwrap();
+            let term = MPolynomial::constant(coeff_val) * x.clone().pow(i as usize);
+            acc = acc + term;
+        }
+        acc
+    }
 }
 
 // multivariate poly addition
@@ -190,3 +219,73 @@ impl Mul for MPolynomial {
         MPolynomial { dict: result_dict }
     }
 }
+
+
+
+#[cfg(test)]
+mod tests {
+    use std::vec;
+
+    use super::*;
+
+    #[test]
+    fn test_evaluate(){
+        // polynomials
+        let variables = MPolynomial::variables(4);
+        let mpoly1 = MPolynomial::constant(1) * variables[0].clone() + MPolynomial::constant(2) * variables[1].clone() + MPolynomial::constant(5) * variables[2].clone().pow(3);
+        let mpoly2 = MPolynomial::constant(1) * variables[0].clone() * variables[3].clone() + MPolynomial::constant(5) * (variables[3].clone().pow(3)) + MPolynomial::constant(5);  
+        let mpoly3 = mpoly1.clone() * mpoly2.clone();
+
+        // point to evaluate
+        let point = vec![0, 5, 5, 2].iter().map(|&x| FieldElement::new(BigInt::from(x))).collect::<Vec<FieldElement>>();
+
+        // evaluateS
+        let eval1 = mpoly1.eval(&point);
+        let eval2 = mpoly2.eval(&point);
+        let eval3 = mpoly3.eval(&point);
+
+        // check correct values
+        assert_eq!(eval1.value, BigInt::from(635));
+        assert_eq!(eval2.value, BigInt::from(45));
+        assert_eq!(eval3.value, BigInt::from(28575));
+
+        // check eval commutativity
+        assert_eq!(eval1.clone() * eval2.clone(), eval3);
+        assert_eq!(eval1 + eval2, (mpoly1 + mpoly2).eval(&point));
+    }
+
+    #[test]
+    fn test_lift(){
+
+        // interpolate a univariate polynomial
+        let upoly = Polynomial::lagrange(
+            vec![FieldElement::new(BigInt::from(0)), FieldElement::new(BigInt::from(1)), FieldElement::new(BigInt::from(2))],
+            vec![FieldElement::new(BigInt::from(2)), FieldElement::new(BigInt::from(5)), FieldElement::new(BigInt::from(5))],
+        );
+
+        // lift the univariate polynomial to a multivariate polynomial
+        let mpoly = MPolynomial::lift(&upoly, 3);
+
+        // ensure correct coefficients in mpoly
+        let key_1: Vec<i128> = vec![0];
+        let key_2: Vec<i128> = vec ![0, 0, 0, 1];
+        let key_3: Vec<i128> = vec![0, 0, 0, 2];
+
+        let coeff_1: FieldElement = mpoly.dict.get(&key_1).unwrap().clone();
+        let coeff_2: FieldElement = mpoly.dict.get(&key_2).unwrap().clone();
+        let coeff_3: FieldElement = mpoly.dict.get(&key_3).unwrap().clone();
+        
+        assert_eq!(coeff_1.value, BigInt::from(2));
+        assert_eq!(coeff_2.value, BigInt::from(135248948571115190067962368383525060613 as i128));
+        assert_eq!(coeff_3.value, BigInt::from(135248948571115190067962368383525060607 as i128));
+
+        // 270497897142230380135924736767050121204
+        let upoly_eval = upoly.eval(FieldElement::new(BigInt::from(5)));
+        let mpoly_eval = mpoly.eval(&vec![FieldElement::zero(), FieldElement::zero(), FieldElement::zero(), FieldElement::new(BigInt::from(5))]);
+
+        assert_eq!(upoly_eval, mpoly_eval);
+    }
+}
+
+
+
