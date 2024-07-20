@@ -1,6 +1,5 @@
 use zk_stark::modules::field::{*};
 use zk_stark::modules::univariate_poly::{*};
-use zk_stark::modules::trace_lde::{*};
 
 
 fn main() {
