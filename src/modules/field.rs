@@ -1,4 +1,5 @@
 
+use core::panic;
 use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::fmt;
 use num_bigint::RandBigInt;
@@ -86,6 +87,20 @@ impl FieldElement {
         }
 
         FieldElement::new(t)
+    }
+
+    // primitive n'th root of unity c^n = 1
+    pub fn primitive_nth_root(n: i128) -> FieldElement {
+        assert!(n <= 1 << 119 && (n & (n-1)) == 0, "Field does not have nth root of unity where n > 2^119 or not power of two.");
+
+        // accumulate root of unity by squaring generator
+        let mut root = FieldElement::generator();
+        let mut order: i128 = 1 << 119;
+        while order != n {
+            root = root.pow(2);
+            order = order / 2;
+        }
+        root
     }
 }
 
@@ -190,6 +205,16 @@ mod tests {
         let result = elem1 - elem2;
         let expected_value = (FieldElement::modulus() - 1.to_bigint().unwrap()) % FieldElement::modulus();
         assert_eq!(result.value, expected_value);
+    }
+
+    #[test]
+    fn primitive_nth_root() {
+
+        let n = 16;
+
+        let root = FieldElement::primitive_nth_root(n);
+
+        
     }
 }
 
