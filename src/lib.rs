@@ -4,4 +4,5 @@ pub mod modules{
     pub mod multivariate_poly;
     pub mod proof_stream;
     pub mod merkle;
+    pub mod fri;
 }

@@ -9,7 +9,7 @@ use generic_array::GenericArray;
 type OutputSize = U32; // 32 bytes (256 bits) output
 type HashOutput = GenericArray<u8, OutputSize>; // Fixed-size hash output
 
-struct Merkle;
+pub struct Merkle;
 
 impl Merkle {
 
@@ -34,7 +34,7 @@ impl Merkle {
     }
 
     // Commit to a list of data elements
-    fn commit(data_array: &[Vec<u8>]) -> HashOutput {
+    pub fn commit(data_array: &Vec<Vec<u8>>) -> HashOutput {
 
         // Hash each data element
         let leafs: Vec<HashOutput> = data_array.iter()

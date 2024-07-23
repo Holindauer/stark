@@ -1,12 +1,3 @@
-// use sha3::{Digest, Shake256};
-// use sha3::digest::{Update, ExtendableOutput};
-
-// use serde::{Serialize, Deserialize};
-// use std::string;
-
-
-// use bincode;
-
 use sha3::{Digest, Shake256};
 use sha3::digest::{Update, ExtendableOutput, XofReader};
 use serde::{Serialize, Deserialize};
@@ -14,14 +5,14 @@ use bincode;
 use std::vec;
 
 #[derive(Serialize, Deserialize)]
-struct ProofStream {
+pub struct ProofStream {
     objects: Vec<String>,
     read_idx: usize,
 }
 
 impl ProofStream {
     // Constructor
-    fn new() -> Self {
+    pub fn new() -> Self {
         ProofStream {
             objects: vec![],
             read_idx: 0,
@@ -29,12 +20,12 @@ impl ProofStream {
     }
 
     // Method to add an object to the stream
-    fn push(&mut self, obj: String) {
+    pub fn push(&mut self, obj: String) {
         self.objects.push(obj);
     }
 
     // Method to retrieve and remove the next object from the stream
-    fn pull(&mut self) -> String {
+    pub fn pull(&mut self) -> String {
         assert!(self.read_idx < self.objects.len(), "ProofStream: cannot pull object; queue empty.");
         let obj = self.objects[self.read_idx].clone();
         self.read_idx += 1;
@@ -42,12 +33,12 @@ impl ProofStream {
     }
 
     // Method to serialize the proof stream
-    fn serialize(&self) -> Vec<u8> {
+    pub fn serialize(&self) -> Vec<u8> {
         bincode::serialize(&self.objects).unwrap()
     }
 
     // Static method to deserialize the proof stream
-    fn deserialize(bb: &[u8]) -> Self {
+    pub fn deserialize(bb: &[u8]) -> Self {
         let objects: Vec<String> = bincode::deserialize(bb).unwrap();
         ProofStream {
             objects,
@@ -56,7 +47,7 @@ impl ProofStream {
     }
 
     // Method for the prover to generate a hash
-    fn prover_fiat_shamir(&self, num_bytes: usize) -> Vec<u8> {
+    pub fn prover_fiat_shamir(&self, num_bytes: usize) -> Vec<u8> {
         let data = self.serialize();
         let mut hasher = Shake256::default();
         hasher.update(&data);
@@ -67,7 +58,7 @@ impl ProofStream {
     }
 
     // Method for the verifier to generate a hash
-    fn verifier_fiat_shamir(&self, num_bytes: usize) -> Vec<u8> {
+    pub fn verifier_fiat_shamir(&self, num_bytes: usize) -> Vec<u8> {
         let data = bincode::serialize(&self.objects[..self.read_idx]).unwrap();
         let mut hasher = Shake256::default();
         hasher.update(&data);
