@@ -74,7 +74,7 @@ impl Merkle {
     }
 
     // Open a leaf at a given index, returns authentication path
-    fn open(index: usize, data_array: &[Vec<u8>]) -> Vec<HashOutput> {
+    pub fn open(index: usize, data_array: &Vec<Vec<u8>>) -> Vec<HashOutput> {
 
         // Hash each data element
         let leafs: Vec<HashOutput> = data_array.iter()

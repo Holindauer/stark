@@ -95,7 +95,7 @@ impl Fri {
         domain
     }
 
-    // commit phase
+    // commit 
     pub fn commit(&self, mut codeword: Vec<FieldElement>, proof_stream: &mut ProofStream) -> Vec<Vec<FieldElement>> {
         
         // shorthand
@@ -151,6 +151,58 @@ impl Fri {
 
         codewords
     }
+
+    // query
+    pub fn query(&self, current_codeword: Vec<FieldElement>, next_codeword: Vec<FieldElement>, c_indices: Vec<usize>, proof_stream: &mut ProofStream) -> Vec<usize> {
+
+        // infer a and b indices
+        let mut a_indices: Vec<usize> = Vec::new();
+        let mut b_indices: Vec<usize> = Vec::new();
+        for i in 0..c_indices.len() {
+            a_indices.push(i);
+            b_indices.push(i + current_codeword.len()/2);
+        }
+
+        // reveal leaves
+        for s in 0..self.num_colinearity_tests {
+
+            // push points to proof stream
+            proof_stream.push(
+                serde_json::to_string(
+                    // tuple of three colinear check points
+                    &(
+                        current_codeword.get(a_indices[s]).unwrap().to_string(),
+                        current_codeword.get(b_indices[s]).unwrap().to_string(),
+                        next_codeword.get(c_indices[s]).unwrap().to_string()
+                    )
+                ).unwrap()
+            );
+        }
+
+        // reveal authentication path
+        for s in 0..self.num_colinearity_tests {
+
+            let open_a: Vec<HashOutput> = Merkle::open(a_indices[s], &vec![bincode::serialize(&current_codeword).unwrap()]);
+            let serialized_open_a = serde_json::to_string(&open_a).unwrap();
+            proof_stream.push( serialized_open_a );
+
+            let open_b: Vec<HashOutput> = Merkle::open(b_indices[s], &vec![bincode::serialize(&current_codeword).unwrap()]);
+            let serialized_open_b = serde_json::to_string(&open_b).unwrap();
+            proof_stream.push( serialized_open_b );
+
+            let open_c: Vec<HashOutput> = Merkle::open(c_indices[s], &vec![bincode::serialize(&next_codeword).unwrap()]);
+            let serialized_open_c = serde_json::to_string(&open_c).unwrap();
+            proof_stream.push( serialized_open_c );
+
+        }
+
+        // return a + b indices
+        a_indices.extend(b_indices);
+        a_indices
+    }
+
+    
+
 }
 
 
@@ -208,9 +260,13 @@ mod tests {
 
 
 
-
+        // ! temporary belo
         // commit test
         let codewords = fri.commit(codeword, &mut proof_stream);
+
+        println!("codewords collected");
+
+        // query test
 
 
         // print len of each codword
