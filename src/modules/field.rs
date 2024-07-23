@@ -102,6 +102,15 @@ impl FieldElement {
         }
         root
     }
+
+    // sample random field element
+    pub fn sample(byte_array: Vec<u8>) -> FieldElement {
+        let mut acc = BigInt::zero();
+        for b in byte_array {
+            acc = (acc << 8) ^ BigInt::from(b);
+        }   
+        FieldElement::new(acc % FieldElement::modulus())
+    }
 }
 
 // Note: modulo applied in FieldElement constructor
@@ -208,13 +217,22 @@ mod tests {
     }
 
     #[test]
-    fn primitive_nth_root() {
-
+    fn test_primitive_nth_root() {
         let n = 16;
-
         let root = FieldElement::primitive_nth_root(n);
+        assert_eq!(root.pow(n), FieldElement::one());
+    }
 
-        
+    #[test]
+    fn test_sample() {
+
+        // create vec of 32 random bytes
+        let mut rng = rand::thread_rng();
+        let byte_array: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+        let elem = FieldElement::sample(byte_array);
+
+        // check if element is within modulus
+        assert!(elem.value < FieldElement::modulus());
     }
 }
 
