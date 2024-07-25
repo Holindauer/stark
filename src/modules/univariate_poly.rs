@@ -48,15 +48,13 @@ impl Polynomial {
     pub fn degree(&self) -> usize {
         let mut degree = self.coeffs.len() - 1;
         let zero = FieldElement::zero();
-        for i in 0..self.coeffs.len(){
-            let next_deg = self.coeffs.get(self.coeffs.len() - (1 + i)).unwrap();
-            if  *next_deg == zero {
-                degree = degree - 1;
-            }
-            else { break; }
+
+        // remove trailing zeros
+        for c in self.coeffs.iter() {
+            if c != &zero { break; }
+            degree -= 1;
         }
         degree
-        // self.coeffs.len() - (1 as usize)
     }
 
     // checks for zero polynomial
