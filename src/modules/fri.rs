@@ -1,3 +1,5 @@
+use std::arch::x86_64::_CMP_EQ_OS;
+
 use crate::modules::field::{*};
 use crate::modules::merkle::{*};
 use crate::modules::proof_stream::{*};
@@ -16,7 +18,7 @@ type OutputSize = U32; // 32 bytes (256 bits) output
 type HashOutput = GenericArray<u8, OutputSize>; // Fixed-size hash output
 
 
-struct Fri {
+pub struct Fri {
     offset: FieldElement,
     omega: FieldElement,
     domain_length: usize,
@@ -27,7 +29,7 @@ struct Fri {
 impl Fri {
     
     // constructor 
-    fn new( offset: FieldElement, omega: FieldElement, initial_domain_length: usize, expansion_factor: usize, num_colinearity_tests: usize ) -> Fri {        
+    pub fn new( offset: FieldElement, omega: FieldElement, initial_domain_length: usize, expansion_factor: usize, num_colinearity_tests: usize ) -> Fri {        
 
         let fri_obj = Fri { offset, omega, domain_length: initial_domain_length, expansion_factor, num_colinearity_tests };
         assert!(fri_obj.num_rounds() > 0, "Cannot do FRI with less than 1 round");
@@ -35,7 +37,7 @@ impl Fri {
     }
 
     // computes num rounds of the fri protocol
-    fn num_rounds(&self) -> usize {
+    pub fn num_rounds(&self) -> usize {
 
         let mut codeword_length = self.domain_length.clone();
         let mut num_rounds = 0; 
@@ -50,7 +52,7 @@ impl Fri {
     }
 
     // computes the indices to sample for the fri protocol
-    fn sample_indices(&self, seed: &[u8], size: usize, reduced_size: usize, number: usize) -> Vec<usize> {
+    pub fn sample_indices(&self, seed: &Vec<u8>, size: usize, reduced_size: usize, number: usize) -> Vec<usize> {
         let mut indices = Vec::new();
         let mut reduced_indices = Vec::new();
         let mut counter: u64 = 0;
@@ -77,7 +79,7 @@ impl Fri {
     }
 
     // helper function to sample index from byte array of random bytes
-    fn sample_index(byte_array: Vec<u8>, size: usize) -> usize {
+    pub fn sample_index(byte_array: Vec<u8>, size: usize) -> usize {
         let mut acc: usize = 0;
         for b in byte_array {
             acc = (acc << 8) ^ (b as usize);
@@ -86,7 +88,7 @@ impl Fri {
     }
 
     // computes domain for polynomial evaluation
-    fn eval_domain(&self) -> Vec<FieldElement> {
+    pub fn eval_domain(&self) -> Vec<FieldElement> {
 
         let mut domain: Vec<FieldElement> = Vec::new();
         for i in 0..self.domain_length {
@@ -158,9 +160,9 @@ impl Fri {
         // infer a and b indices
         let mut a_indices: Vec<usize> = Vec::new();
         let mut b_indices: Vec<usize> = Vec::new();
-        for i in 0..c_indices.len() {
-            a_indices.push(i);
-            b_indices.push(i + current_codeword.len()/2);
+        for idx in c_indices.clone() {
+            a_indices.push(idx);
+            b_indices.push(idx + current_codeword.len()/2);
         }
 
         // reveal leaves
@@ -169,7 +171,7 @@ impl Fri {
             // push points to proof stream
             proof_stream.push(
                 serde_json::to_string(
-                    // tuple of three colinear check points
+                    // tuple of three colinear points to check
                     &(
                         current_codeword.get(a_indices[s]).unwrap().to_string(),
                         current_codeword.get(b_indices[s]).unwrap().to_string(),
@@ -182,18 +184,26 @@ impl Fri {
         // reveal authentication path
         for s in 0..self.num_colinearity_tests {
 
-            let open_a: Vec<HashOutput> = Merkle::open(a_indices[s], &vec![bincode::serialize(&current_codeword).unwrap()]);
+            // a indices
+            let serialized_codeword: Vec<Vec<u8>> = current_codeword.iter() // convert to bytes
+            .map(|element| bincode::serialize(element).unwrap()).collect();
+            let open_a: Vec<HashOutput> = Merkle::open(a_indices[s], &serialized_codeword);
             let serialized_open_a = serde_json::to_string(&open_a).unwrap();
-            proof_stream.push( serialized_open_a );
+            proof_stream.push(serialized_open_a);
 
-            let open_b: Vec<HashOutput> = Merkle::open(b_indices[s], &vec![bincode::serialize(&current_codeword).unwrap()]);
+            // b indices
+            let serialized_codeword: Vec<Vec<u8>> = current_codeword.iter() // convert to bytes
+            .map(|element| bincode::serialize(element).unwrap()).collect();
+            let open_b: Vec<HashOutput> = Merkle::open(b_indices[s], &serialized_codeword);
             let serialized_open_b = serde_json::to_string(&open_b).unwrap();
-            proof_stream.push( serialized_open_b );
+            proof_stream.push(serialized_open_b);
 
-            let open_c: Vec<HashOutput> = Merkle::open(c_indices[s], &vec![bincode::serialize(&next_codeword).unwrap()]);
+            // c indices
+            let serialized_codeword: Vec<Vec<u8>> = next_codeword.iter() // convert to bytes
+            .map(|element| bincode::serialize(element).unwrap()).collect();
+            let open_c: Vec<HashOutput> = Merkle::open(c_indices[s], &serialized_codeword);
             let serialized_open_c = serde_json::to_string(&open_c).unwrap();
-            proof_stream.push( serialized_open_c );
-
+            proof_stream.push(serialized_open_c);
         }
 
         // return a + b indices
@@ -201,8 +211,42 @@ impl Fri {
         a_indices
     }
 
-    
+    // prove
+    pub fn prove(&self, codeword: Vec<FieldElement>, proof_stream: &mut ProofStream) -> Vec<usize> {
 
+        // commit
+        let codewords: Vec<Vec<FieldElement>> = self.commit(codeword, proof_stream);
+
+        // get indices
+        let top_level_indices = self.sample_indices(
+            &proof_stream.prover_fiat_shamir(32),            // seed
+            codewords.get(1).unwrap().len(),                 // size
+            codewords.get(codewords.len()-1).unwrap().len(), // reduced size
+            self.num_colinearity_tests                       // number of tests
+        );
+        let mut indices = top_level_indices.clone(); // working indices
+
+
+        // query phase
+        for i in 0..codewords.len()-1 {
+            
+            // fold
+            let mut folded_indices = vec![];
+            for idx in indices.clone() { folded_indices.push( idx % (codewords.get(i).unwrap().len()/2) );} 
+            indices = folded_indices;
+            
+            // query
+            indices = self.query(
+                codewords.get(i).unwrap().clone(),
+                codewords.get(i+1).unwrap().clone(),
+                indices,
+                proof_stream
+            );
+        }
+
+        // return top level indices
+        top_level_indices
+    }
 }
 
 
@@ -257,22 +301,7 @@ mod tests {
         // setup proof stream
         let mut proof_stream = ProofStream::new();
 
-
-
-
-        // ! temporary belo
-        // commit test
-        let codewords = fri.commit(codeword, &mut proof_stream);
-
-        println!("codewords collected");
-
         // query test
-
-
-        // print len of each codword
-        for c in codewords {
-            println!("Codeword length: {}", c.len());
-        }
-
+        fri.prove(codeword, &mut proof_stream);
     }
 }

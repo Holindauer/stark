@@ -33,7 +33,8 @@ impl Merkle {
         }
     }
 
-    // Commit to a list of data elements
+
+    // Commit to a list of data elements represented as byte vectors
     pub fn commit(data_array: &Vec<Vec<u8>>) -> HashOutput {
 
         // Hash each data element
@@ -52,29 +53,30 @@ impl Merkle {
     // Open a leaf at a given index, recursively collects authentication path
     fn open_(index: usize, leafs: &[HashOutput]) -> Vec<HashOutput> {
         assert!(leafs.len().is_power_of_two(), "length must be power of two");
-        assert!(index < leafs.len(), "cannot open invalid index");
+        assert!(index < leafs.len(), "cannot open invalid index");  
+
+        let mid = leafs.len() / 2;
 
         // Return the sibling of the leaf
-        if leafs.len() == 2 {  vec![leafs[1 - index].clone()] } 
-        else {
-            // split the leafs in two, open the correct half
-            let mid = leafs.len() / 2;
-            if index < mid { 
+        if leafs.len() == 2 {  
+            vec![leafs[1 - index]] 
+        } 
+        else if index < mid {
                 // open the left half, push the right sibling
                 let mut result = Self::open_(index, &leafs[..mid]);
                 result.push(Self::commit_leafs(&leafs[mid..]));
                 result
-            } else { 
+        }
+        else {
                 // open the right half, push the left sibling
                 let mut result = Self::open_(index - mid, &leafs[mid..]);
                 result.push(Self::commit_leafs(&leafs[..mid]));
                 result
-            }
         }
     }
 
     // Open a leaf at a given index, returns authentication path
-    pub fn open(index: usize, data_array: &Vec<Vec<u8>>) -> Vec<HashOutput> {
+    pub fn open(index: usize, data_array: &Vec<Vec<u8>>)  -> Vec<HashOutput> {
 
         // Hash each data element
         let leafs: Vec<HashOutput> = data_array.iter()
@@ -84,6 +86,7 @@ impl Merkle {
                 hasher.finalize()
             })
             .collect();
+
 
         // return the computed authentication path
         Self::open_(index, &leafs)
@@ -156,7 +159,7 @@ mod tests {
         let leafs: Vec<Vec<u8>> = (0..n).map(|_| random_data_vec_u8()).collect();
         let root = Merkle::commit(&leafs);
 
-        // Test that opening and verifying each leaf works correctly
+    //     // Test that opening and verifying each leaf works correctly
         for i in 0..n {
             let path = Merkle::open(i, &leafs);
             assert!(Merkle::verify(&root, i, &path, &leafs[i]), "Verification failed for correct leaf");
