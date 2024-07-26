@@ -7,9 +7,14 @@ use crate::modules::univariate_poly::{*};
 use blake2::{Blake2b, Digest};
 use typenum::U64;
 use num_bigint::BigInt;
-use num_traits::{Zero, One};
+extern crate num_traits;
+extern crate num_bigint;
 use hex;
 use serde::{Serialize, Deserialize};
+
+
+use num_traits::Num;  // This trait contains the from_str_radix method
+
 
 use generic_array::typenum::U32;
 use generic_array::GenericArray;
@@ -108,8 +113,6 @@ impl Fri {
         let mut omega = self.omega.clone();
         let mut offset = self.offset.clone();
         let mut codewords = Vec::new();
-
-        println!("rounds: {}", self.num_rounds());
 
         // split and fold rounds
         for r in 0..self.num_rounds() {
@@ -247,11 +250,183 @@ impl Fri {
         // return top level indices
         top_level_indices
     }
+
+    pub fn verify(&self, proof_stream: &mut ProofStream, polynomial_values: &mut Vec<(usize, FieldElement)>) -> bool {
+
+        // short hand
+        let mut omega: FieldElement = self.omega.clone();
+        let mut offset: FieldElement = self.offset.clone();
+
+        // extract merkle roots and alphas
+        let mut roots: Vec<String> = Vec::new();
+        let mut alphas: Vec<FieldElement> = Vec::new();
+        for r in 0..self.num_rounds(){
+            roots.push(proof_stream.pull());
+            alphas.push(FieldElement::sample(proof_stream.verifier_fiat_shamir(32)))
+        }
+
+        // extract last codeword
+        let last_codeword: Vec<FieldElement> = serde_json::from_str(&proof_stream.pull()).unwrap();
+
+        // compute last codeword's merkle root
+        let serialized_codeword_commit: Vec<Vec<u8>> = last_codeword.iter() // to bytes
+        .map(|x| bincode::serialize(x).unwrap()).collect::<Vec<Vec<u8>>>();
+        let root: String = hex::encode(Merkle::commit(&serialized_codeword_commit));
+
+        // verify the last codeword's root is the same as the last root
+        if *roots.get(roots.len()-1).unwrap() != root {
+            println!("last codeword is not well formed");
+            return false;
+        }
+        
+        // check that it is low degree
+        let degree = (last_codeword.len() / self.expansion_factor) - 1;
+        let mut last_omega: FieldElement = omega.clone();
+        let mut last_offset: FieldElement = offset.clone();
+        for r in 0..self.num_rounds()-1 {
+            last_omega = last_omega.pow(2);
+            last_offset = last_offset.pow(2);
+        }
+
+        // assert that last_omega has the right order
+        assert!(last_omega.inverse() == last_omega.pow((last_codeword.len()-1) as i128));
+
+        // compute interpolant
+        let mut last_domain: Vec<FieldElement> = vec![];
+        for i in 0..last_codeword.len() {
+            last_domain.push(last_offset.clone() * last_omega.pow(i as i128));
+        }
+        let poly = Polynomial::lagrange(last_domain.clone(), last_codeword.clone());
+
+        // verify by evaluating
+        let poly_eval: Vec<FieldElement> = poly.eval_domain(last_domain);
+        assert_eq!(poly_eval, last_codeword, "last codeword is not low degree");
+        if poly.degree() > degree {
+            println!("last codeword does not correspond to polynomial of low enough degree");
+            println!("degree: {}, expected: {}", poly.degree(), degree);
+            return false;
+        }
+
+        // get indices
+        let top_level_indices = self.sample_indices(
+            &proof_stream.verifier_fiat_shamir(32),      // seed
+            self.domain_length >> 1,                     // size
+            self.domain_length >> (self.num_rounds()-1), // reduced size
+            self.num_colinearity_tests                   // num tests
+        );
+
+        // for every round, check consistency of subsequent layers
+        for r in 0..self.num_rounds()-1{
+
+            // fold c indices
+            let mut c_indices = vec![];
+            for idx in top_level_indices.clone() {
+                c_indices.push(idx % (self.domain_length >> (r+1)));
+            }
+
+            // infer a and b indices
+            let mut a_indices: Vec<usize> = Vec::new();
+            let mut b_indices: Vec<usize> = Vec::new();
+            for idx in c_indices.clone() { 
+                a_indices.push(idx); 
+                b_indices.push(idx + (self.domain_length >> (r+1)));    
+            }
+
+            // read values and check colinearity
+            let mut aa: Vec<FieldElement> = vec![];
+            let mut bb: Vec<FieldElement> = vec![];
+            let mut cc: Vec<FieldElement> = vec![];
+            for s in 0..self.num_colinearity_tests {
+
+                // read points from proof stream
+                let (ay, by, cy): (String, String, String) = serde_json::from_str(&proof_stream.pull()).unwrap();
+
+                // convert to field elements
+                let ay = FieldElement::new(BigInt::from_str_radix(&ay, 10).expect("BigInt parse err"));
+                let by = FieldElement::new(BigInt::from_str_radix(&by, 10).expect("BigInt parse err"));
+                let cy = FieldElement::new(BigInt::from_str_radix(&cy, 10).expect("BigInt parse err"));
+
+                // push to respective vectors
+                aa.push(ay.clone()); bb.push(by.clone()); cc.push(cy.clone());
+
+                // record top-layer values for layer verification
+                if r == 0 {
+                    polynomial_values.push( (a_indices[s], ay.clone()) );
+                    polynomial_values.push( (b_indices[s], by.clone()) );
+                }
+
+                // colinearity check 
+                let ax = offset.clone() * omega.clone().pow(a_indices[s] as i128);
+                let bx = offset.clone() * omega.pow(b_indices[s] as i128);
+                let cx = alphas.get(r).unwrap();
+                let points = vec![(ax.value, ay.value), (bx.value, by.value), (cx.value.clone(), cy.value)];
+                if false == Polynomial::test_colinearity  (points) {
+                    println!("colinearity test failed");
+                    return false;
+                }
+            }   
+
+            // verify authentication paths
+            for i in 0..self.num_colinearity_tests {
+
+                // pull authentication path from proof stream for a indices
+                let path: String  = proof_stream.pull();
+                let deserialized_path: Vec<HashOutput> = serde_json::from_str(&path).unwrap();
+
+                // verify path for a indices
+                if false == Merkle::verify(
+                    &GenericArray::clone_from_slice(&hex::decode(roots.get(r).unwrap()).unwrap()), // decode --> GenericArray
+                    *a_indices.get(i).unwrap(),
+                    &deserialized_path,
+                    &bincode::serialize(aa.get(i).unwrap()).unwrap()
+                ) { return false; }    
+
+                // pull authentication path from proof stream for b indices
+                let path: String  = proof_stream.pull();
+                let deserialized_path: Vec<HashOutput> = serde_json::from_str(&path).unwrap();
+
+                // verify path for b indices
+                if false == Merkle::verify(
+                    &GenericArray::clone_from_slice(&hex::decode(roots.get(r).unwrap()).unwrap()), // decode --> GenericArray
+                    *b_indices.get(i).unwrap(),
+                    &deserialized_path,
+                    &bincode::serialize(bb.get(i).unwrap()).unwrap()
+                ) { return false; }
+
+                // pull authentication path for c indices
+                let path: String  = proof_stream.pull();
+                let deserialized_path: Vec<HashOutput> = serde_json::from_str(&path).unwrap();
+
+                // verify path for c indices
+                if false == Merkle::verify(
+                    &GenericArray::clone_from_slice(&hex::decode(roots.get(r+1).unwrap()).unwrap()), // decode --> GenericArray
+                    *c_indices.get(i).unwrap(),
+                    &deserialized_path,
+                    &bincode::serialize(cc.get(i).unwrap()).unwrap()
+                ) { return false; }
+
+
+                return true;
+
+            }
+
+            // square omega and offset for next round
+            omega = omega.pow(2);
+            offset = offset.pow(2);
+
+
+        }
+
+
+        true
+    }
 }
 
 
 #[cfg(test)]
 mod tests {
+    use core::panic;
+
     use super::*;
 
     #[test]
@@ -296,12 +471,41 @@ mod tests {
         }
 
         // get codeword
-        let codeword = polynomial.eval_domain(domain);
+        let mut codeword = polynomial.eval_domain(domain);
 
         // setup proof stream
+        println!("Testing Valid Codeword");
         let mut proof_stream = ProofStream::new();
 
-        // query test
-        fri.prove(codeword, &mut proof_stream);
+        // prove
+        fri.prove(codeword.clone(), &mut proof_stream);
+
+        // verify 
+        let mut points: Vec<(usize, FieldElement)> = vec![];
+        let verdict: bool = fri.verify(&mut proof_stream, &mut points);
+
+        // ensure correct verdict
+        if verdict == false{ panic!("Fri proof should be valid but is not"); } 
+
+
+        for (idx, val) in points {
+            if polynomial.eval(omega.pow(idx as i128)) != val {
+                panic!("Polynomial evals to wrong value");
+            }
+        }
+        println!("Success!");
+
+        println!("Testing Invalid Codeword...");
+
+        // disturb codeword and test again
+        let mut proof_stream = ProofStream::new();
+        for i in 0..degree/3{
+            codeword[i] = FieldElement::zero();
+        }
+
+        fri.prove(codeword.clone(), &mut proof_stream);
+        points = vec![];
+        assert_eq!(false, fri.verify(&mut proof_stream, &mut points));
+        println!("Success!!");
     }
 }

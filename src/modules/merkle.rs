@@ -124,7 +124,7 @@ impl Merkle {
     }
 
     // Verify a leaf at a given index, via the authentication path
-    fn verify(root: &HashOutput, index: usize, path: &[HashOutput], data_element: &Vec<u8>) -> bool {
+    pub fn verify(root: &HashOutput, index: usize, path: &[HashOutput], data_element: &Vec<u8>) -> bool {
         let mut hasher = Blake2b::<OutputSize>::new();
         hasher.update(data_element);
         let digest = hasher.finalize();

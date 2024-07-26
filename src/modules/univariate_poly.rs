@@ -157,18 +157,19 @@ impl Polynomial {
     // test for colinearity
     pub fn test_colinearity(points: Vec<(BigInt, BigInt)>) -> bool {
 
+        // collect intepolation domains and values
         let mut domain: Vec<FieldElement> = vec![];
         let mut values: Vec<FieldElement> = vec![];
-
         for (x, y) in points { 
             domain.push(FieldElement::new(x));
             values.push(FieldElement::new(y));
         } 
 
+        // lagrange interpolation
         let poly = Polynomial::lagrange(domain, values);
-        println!("{}", poly);
-        println!("{}", poly.degree());
-        if poly.degree() <= 1{ true } else { false }
+
+        // ensure colinearity
+        if poly.degree() == 1 { true } else { false }
     }
 
 }
@@ -361,8 +362,10 @@ impl fmt::Display for Polynomial {
 
         // display coeefs from highest term to lowest
         for (i, coeff) in self.coeffs.iter().enumerate() {
-            if i > 0 { write!(f, " + ")?; }
-            write!(f, "{}x^{}", coeff, len - i - 1)?;
+            if i > 0 && coeff.value != BigInt::zero() { 
+                write!(f, " + ")?; 
+                write!(f, "{}x^{}", coeff, len - i - 1)?;
+            }
         }
         Ok(())
     }

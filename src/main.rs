@@ -4,11 +4,9 @@ use zk_stark::modules::univariate_poly::{*};
 use zk_stark::modules::fri::{*};
 use zk_stark::modules::proof_stream::{*};
 
-use num_bigint::{BigInt, BigUint};
-use num_traits::{Zero, One};        
+use num_bigint::BigInt;
 
 fn main() {
-
 
         // setup
         let degree: usize = 63;
@@ -41,6 +39,7 @@ fn main() {
             coeffs.push(FieldElement::new(BigInt::from(i)));
         }
         let polynomial = Polynomial{coeffs};
+        println!("polynomial: {}", polynomial);
 
         // setup domain for evaluation
         let mut domain: Vec<FieldElement> = vec![];
@@ -56,6 +55,12 @@ fn main() {
 
         // query test
         fri.prove(codeword, &mut proof_stream);
-}
 
-
+        let mut points: Vec<(usize, FieldElement)> = vec![];
+        let verdict: bool = fri.verify(&mut proof_stream, &mut points);
+        if verdict {
+            println!("FRI test passed");
+        } else {
+            println!("FRI test failed");
+        }
+    }
