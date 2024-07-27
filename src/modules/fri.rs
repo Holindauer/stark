@@ -223,7 +223,7 @@ impl Fri {
         // get indices
         let top_level_indices = self.sample_indices(
             &proof_stream.prover_fiat_shamir(32),            // seed
-            codewords.get(1).unwrap().len(),                 // size
+            codewords.get(0).unwrap().len() / 2,             // size  
             codewords.get(codewords.len()-1).unwrap().len(), // reduced size
             self.num_colinearity_tests                       // number of tests
         );
@@ -413,10 +413,7 @@ impl Fri {
             // square omega and offset for next round
             omega = omega.pow(2);
             offset = offset.pow(2);
-
-
         }
-
 
         true
     }
