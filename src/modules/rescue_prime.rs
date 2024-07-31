@@ -305,6 +305,56 @@ impl RescuePrime {
         constraints
     }
 
+    // round constant polynomials
+    pub fn round_constants_polynomials(&self, omicron: FieldElement) -> (Vec<MPolynomial>, Vec<MPolynomial>) {
+
+        // first step constants
+        let mut first_step_constants: Vec<MPolynomial> = vec![];
+        for i in 0..self.m {    
+
+            // domain
+            let mut domain: Vec<FieldElement> = vec![];
+            for r in 0..self.N { domain.push(omicron.pow(r as u128)); }
+
+            // values
+            let mut values: Vec<FieldElement> = vec![];
+            for r in 0..self.N { values.push(self.round_constants[2*r*self.m+i].clone()); }
+
+            // interpolate univariate poly over domain and values
+            let univariate: Polynomial = Polynomial::lagrange(domain, values);
+
+            // lift uni to multivariate
+            let multivariate: MPolynomial = MPolynomial::lift(&univariate, 0);
+
+            // push to first step constants
+            first_step_constants.push(multivariate);
+        }
+
+        // second step constants
+        let mut second_step_constants: Vec<MPolynomial> = vec![];
+        for i in 0..self.m {
+
+            // domain
+            let mut domain: Vec<FieldElement> = vec![];
+            for r in 0..self.N { domain.push( omicron.pow(r as u128)); }
+
+            // values
+            let mut values: Vec<FieldElement> = vec![];
+            for r in 0..self.N { values.push(self.round_constants[2*r*self.m+self.m+i].clone()); }
+
+            // interpolate uni poly over domain
+            let univariate: Polynomial = Polynomial::lagrange(domain, values);
+
+            // lift uni to multivariate
+            let multivariate: MPolynomial = MPolynomial::lift(&univariate, 0);
+
+            // push to second step constants
+            second_step_constants.push(multivariate);
+        }
+
+        (first_step_constants, second_step_constants)
+    }
+
 }
 
 #[cfg(test)]
@@ -363,10 +413,14 @@ mod tests {
                 println!("Rescue prime boundary condition error: trace element: {} at cycle {} has value {}, but should have value {}", element, cycle, trace[cycle][element], value);
                 assert!(false);
             }
-            else {
-                println!("cycle {}", cycle);
-            }
         }
+
+        // test transition constraints
+        let omicron = FieldElement::primitive_nth_root(1 << 119);
+
+        let (first_step_constants, second_step_constants) = rp.round_constants_polynomials(omicron);
+
+
 
     }
 }
