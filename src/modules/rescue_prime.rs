@@ -264,9 +264,6 @@ impl RescuePrime {
                 state.push( temp[i].clone() + self.round_constants[2*r*self.m+i].clone() );
             }
 
-            // record state into trace
-            trace.push(state.clone());
-
             // backward half-round
             // S-box
             for i in 0..self.m {
@@ -293,6 +290,19 @@ impl RescuePrime {
         }
 
         trace
+    }
+
+    // boundary constraints
+    pub fn boundary_constraints(&self, output_element: FieldElement) -> Vec<(usize, usize, FieldElement)> {
+        let mut constraints: Vec<(usize, usize, FieldElement)> = vec![];
+        
+        // at stark, capacity is zero
+        constraints.push( (0, 1, FieldElement::zero()) );
+        
+        // at end, rate part is the fiven output element
+        constraints.push( (self.N, 0, output_element) );
+
+        constraints
     }
 
 }
@@ -328,6 +338,35 @@ mod tests {
 
         assert_eq!(trace[0][0], a);
         assert_eq!(trace[trace.len()-1][0], b);
-
     }   
+
+    #[test]
+    fn test_trace() {
+
+        // init rescue prime
+        let rp = RescuePrime::new();
+
+        // hash test
+        let input_element = FieldElement::new(BigInt::from(57322816861100832358702415967512842988 as u128));
+        let b = FieldElement::new(BigInt::from(89633745865384635541695204788332415101 as u128));
+        let output_element = rp.hash(input_element.clone());
+        assert_eq!(b, output_element);
+        
+        // get trace
+        let trace = rp.trace(input_element);
+
+        // test boundary constraints
+        let constraints = rp.boundary_constraints(output_element);
+        for condition in constraints {
+            let (cycle, element, value) = condition;
+            if trace[cycle][element] != value {
+                println!("Rescue prime boundary condition error: trace element: {} at cycle {} has value {}, but should have value {}", element, cycle, trace[cycle][element], value);
+                assert!(false);
+            }
+            else {
+                println!("cycle {}", cycle);
+            }
+        }
+
+    }
 }
