@@ -355,6 +355,41 @@ impl RescuePrime {
         (first_step_constants, second_step_constants)
     }
 
+
+    // transition constraints
+    pub fn transition_constraints(&self, omicron: FieldElement) -> Vec<MPolynomial> {
+        // get polynomails that interpolate through the round constants
+        let (first_step_constants, second_step_constants) = self.round_constants_polynomials(omicron);
+
+        // arithmetize one round of Rescue-Prime
+        let variables: Vec<MPolynomial> = MPolynomial::variables(1 + 2*self.m);
+        let previous_state = &variables[1..(1+self.m)];
+        let next_state = &variables[(1+self.m)..(1+2*self.m)];
+        let mut air: Vec<MPolynomial> = vec![];
+
+        for i in 0..self.m {
+            println!("i: {}", i);
+
+            // compute left hand side symbolically
+            let mut lhs = MPolynomial::constant(0);
+            for k in 0..self.m {
+                lhs = lhs + MPolynomial::constant(self.MDS[i][k].value.to_u128().unwrap()) * (previous_state[k].clone().pow(self.alpha.to_u128().unwrap()))
+            }
+            lhs = lhs + first_step_constants[i].clone();
+
+            // compute right hand side symbolically
+            let mut rhs = MPolynomial::constant(0);
+            for k in 0..self.m {
+                rhs = rhs + MPolynomial::constant(self.MDS_inv[i][k].value.to_u128().unwrap()) * (next_state[k].clone() - second_step_constants[k].clone());
+            }
+            rhs = rhs.pow(self.alpha.to_u128().unwrap());
+
+            // equate left and right hand sides
+            air.push(lhs - rhs); // should equal zero
+        }
+
+        air
+    }
 }
 
 #[cfg(test)]
@@ -418,7 +453,7 @@ mod tests {
         // test transition constraints
         let omicron = FieldElement::primitive_nth_root(1 << 119);
 
-        let (first_step_constants, second_step_constants) = rp.round_constants_polynomials(omicron);
+        rp.transition_constraints(omicron.clone());
 
 
 
