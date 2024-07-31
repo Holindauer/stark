@@ -368,7 +368,6 @@ impl RescuePrime {
         let mut air: Vec<MPolynomial> = vec![];
 
         for i in 0..self.m {
-            println!("i: {}", i);
 
             // compute left hand side symbolically
             let mut lhs = MPolynomial::constant(0);
@@ -401,6 +400,9 @@ mod tests {
     use num_bigint::RandBigInt;
     use num_bigint::BigInt;
     use num_traits::{Zero, One};
+    use rand::RngCore;
+    use rand::Rng;
+    use rand::random;
 
     #[test]
     fn test_rescue_prime() {
@@ -438,10 +440,10 @@ mod tests {
         assert_eq!(b, output_element);
         
         // get trace
-        let trace = rp.trace(input_element);
+        let mut trace = rp.trace(input_element);
 
         // test boundary constraints
-        let constraints = rp.boundary_constraints(output_element);
+        let constraints = rp.boundary_constraints(output_element.clone());
         for condition in constraints {
             let (cycle, element, value) = condition;
             if trace[cycle][element] != value {
@@ -452,10 +454,114 @@ mod tests {
 
         // test transition constraints
         let omicron = FieldElement::primitive_nth_root(1 << 119);
+        let transition_constraints: Vec<MPolynomial> = rp.transition_constraints(omicron.clone());
+        let (first_step_constants, second_step_constants) = rp.round_constants_polynomials(omicron.clone());
+        for o in 0..trace.len()-1 {
+            println!("cycle: {}", o);
+            for air_poly in rp.transition_constraints(omicron.clone()) {
+                
+                // get prev and next state
+                let previous_state: Vec<FieldElement> = vec![trace[o][0].clone(), trace[o][1].clone()];
+                let next_state: Vec<FieldElement> = vec![trace[o+1][0].clone(), trace[o+1][1].clone()];
+                
+                // get point
+                let mut point = vec![omicron.clone().pow(o as u128)];
+                point.extend(previous_state.clone());
+                point.extend(next_state.clone());
 
-        rp.transition_constraints(omicron.clone());
+                if air_poly.eval(&point) != FieldElement::zero() {
+                    println!("Rescue prime transition condition error: air polynomial does not evaluate to zero at point: {:?}", point);
+                    assert!(false);
+                }
+            }
+        }   
 
+        // insert errors into trace to make sure errors get notices
+        for k in 0..10 { 
+            println!("trial: {}...", k);
 
+            // sample error location and value randomly
+            let mut register_index: usize = random();
+            register_index = register_index % rp.m;
+            let mut cycle_index: usize = random();
+            cycle_index = cycle_index % (rp.N+1);
+
+            // random value
+            let mut rng = rand::thread_rng();
+            let mut random_bytes: Vec<u8> = vec![0; 17];
+            rng.fill_bytes(&mut random_bytes);
+            let mut value: FieldElement = FieldElement::sample(random_bytes);
+
+            // skip if value is zero
+            if value == FieldElement::zero() {
+                continue;
+            }
+
+            // reproduce deterministic error 
+            if k == 0 {
+                register_index = 1;
+                cycle_index = 22;
+                value = FieldElement::new(BigInt::from(17274817952119230544216945715808633996 as u128));
+            }
+            
+            // perturb
+            trace[cycle_index][register_index] = trace[cycle_index][register_index].clone() + value.clone();
+
+            // flag for error noticed
+            let mut error_got_noticed: bool = false;
+
+            // test boudnary constraints
+            println!("testing boundary constraints...");
+            for condition in rp.boundary_constraints(output_element.clone()) {
+                if error_got_noticed { break; }
+
+                // get constraint
+                let (cycle, element, value) = condition;
+
+                // if trace doesn't match, flag error
+                if trace[cycle][element] != value {
+                    error_got_noticed = true;
+                }
+            }
+
+            // test transition constraints
+            println!("testing transition constraints...");
+            for o in 0..trace.len()-1 {
+                println!("cycle: {}", o);
+                if error_got_noticed { break; }
+                
+                for air_poly in rp.transition_constraints(omicron.clone()){
+
+                    // get next and prev state
+                    let previous_state = vec![trace[o][0].clone(), trace[o][1].clone()];
+                    let next_state = vec![trace[o+1][0].clone(), trace[o+1][1].clone()];  
+
+                    // get point
+                    let mut point = vec![omicron.clone().pow(o as u128)];
+                    point.extend(previous_state.clone());
+                    point.extend(next_state.clone());  
+
+                    // if air polynomial doesn't evaluate to zero, flag error
+                    if air_poly.eval(&point) != FieldElement::zero() {
+                        error_got_noticed = true;
+                    }
+                }
+            }
+
+            // if error got noticed, panic
+            if !error_got_noticed {
+                println!("error not noticed");
+                println!("cycle: {}", cycle_index.clone());
+                println!("register: {}", register_index.clone());
+                println!("value: {}", value.clone());
+                assert!(false);
+            }
+
+            // return trace to original state
+            trace[cycle_index][register_index] = trace[cycle_index][register_index].clone() - value.clone();
+        }
+
+        println!("rescue prime test passed");
 
     }
 }
