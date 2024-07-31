@@ -21,16 +21,16 @@ use std::ops::{Add, Sub, Mul, Neg};
     }
 */
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MPolynomial {
-    pub dict: HashMap<Vec<i128>, FieldElement>,
+pub struct MPolynomial {
+    pub dict: HashMap<Vec<u128>, FieldElement>, // NOTE: may need to switch to BigInt if big signed ints needed
 }
 
 impl MPolynomial {
 
     // constructors
-    pub fn new(dict: HashMap<Vec<i128>, FieldElement>) -> MPolynomial { MPolynomial { dict } }
+    pub fn new(dict: HashMap<Vec<u128>, FieldElement>) -> MPolynomial { MPolynomial { dict } }
     pub fn zero() -> MPolynomial { MPolynomial { dict: HashMap::new() } }
-    pub fn constant(element: i128) -> MPolynomial { 
+    pub fn constant(element: u128) -> MPolynomial { 
         MPolynomial { dict: HashMap::from([(vec![0], FieldElement::new(BigInt::from(element)))]) } 
     }
 
@@ -122,7 +122,7 @@ impl MPolynomial {
         let mut acc = MPolynomial::zero();
 
         for (i, coeff) in poly.coeffs.iter().rev().enumerate() {
-            let coeff_val: i128 = coeff.value.clone().to_i128().unwrap();
+            let coeff_val: u128 = coeff.value.clone().to_u128().unwrap();
             let term = MPolynomial::constant(coeff_val) * x.clone().pow(i as usize);
             acc = acc + term;
         }
@@ -185,7 +185,7 @@ impl Mul for MPolynomial {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        let mut result_dict: HashMap<Vec<i128>, FieldElement> = HashMap::new();
+        let mut result_dict: HashMap<Vec<u128>, FieldElement> = HashMap::new();
 
         // Iterate over each term in the left polynomial
         for (exponents_left, coeff_left) in &self.dict {
@@ -267,17 +267,17 @@ mod tests {
         let mpoly = MPolynomial::lift(&upoly, 3);
 
         // ensure correct coefficients in mpoly
-        let key_1: Vec<i128> = vec![0];
-        let key_2: Vec<i128> = vec ![0, 0, 0, 1];
-        let key_3: Vec<i128> = vec![0, 0, 0, 2];
+        let key_1: Vec<u128> = vec![0];
+        let key_2: Vec<u128> = vec ![0, 0, 0, 1];
+        let key_3: Vec<u128> = vec![0, 0, 0, 2];
 
         let coeff_1: FieldElement = mpoly.dict.get(&key_1).unwrap().clone();
         let coeff_2: FieldElement = mpoly.dict.get(&key_2).unwrap().clone();
         let coeff_3: FieldElement = mpoly.dict.get(&key_3).unwrap().clone();
         
         assert_eq!(coeff_1.value, BigInt::from(2));
-        assert_eq!(coeff_2.value, BigInt::from(135248948571115190067962368383525060613 as i128));
-        assert_eq!(coeff_3.value, BigInt::from(135248948571115190067962368383525060607 as i128));
+        assert_eq!(coeff_2.value, BigInt::from(135248948571115190067962368383525060613 as u128));
+        assert_eq!(coeff_3.value, BigInt::from(135248948571115190067962368383525060607 as u128));
 
         // 270497897142230380135924736767050121204
         let upoly_eval = upoly.eval(FieldElement::new(BigInt::from(5)));
