@@ -225,6 +225,76 @@ impl RescuePrime {
         // squeeze
         state[0].clone()
     }       
+
+    // trace
+    pub fn trace(&self, input_element: FieldElement) -> Vec<Vec<FieldElement>> {
+
+        // init trace
+        let mut trace: Vec<Vec<FieldElement>> = vec![];
+
+        // absorb
+        let mut state: Vec<FieldElement> = Vec::new();
+        state.push(input_element);
+        for _ in 0..(self.m-1) { state.push(FieldElement::zero()); }
+
+        // explicit copy to record state into trace
+        trace.push(state.clone());
+
+        // permutation
+        for r in 0..self.N {
+
+            // forward half-round
+            // S-box
+            for i in 0..self.m {
+                state[i] = state[i].pow(self.alpha.clone().to_u128().unwrap());
+            }
+
+            // matrix
+            let mut temp: Vec<FieldElement> = vec![];
+            for _ in 0..self.m { temp.push(FieldElement::zero()); }
+            for i in 0..self.m {
+                for j in 0..self.m {
+                    temp[i] = temp[i].clone() + self.MDS[i][j].clone() * state[j].clone();
+                }
+            }
+
+            // constants
+            state = vec![];
+            for i in 0..self.m {
+                state.push( temp[i].clone() + self.round_constants[2*r*self.m+i].clone() );
+            }
+
+            // record state into trace
+            trace.push(state.clone());
+
+            // backward half-round
+            // S-box
+            for i in 0..self.m {
+                state[i] = state[i].pow(self.alpha_inv.clone().to_u128().unwrap());
+            }
+
+            // matrix 
+            temp = vec![];
+            for _ in 0..self.m { temp.push(FieldElement::zero()); }
+            for i in 0..self.m {
+                for j in 0..self.m {
+                    temp[i] = temp[i].clone() + self.MDS[i][j].clone() * state[j].clone(); 
+                }
+            }
+
+            // constants
+            state = vec![];
+            for i in 0..self.m {
+                state.push( temp[i].clone() + self.round_constants[2*r*self.m+self.m+i].clone() );
+            }
+
+            // record state into trace
+            trace.push(state.clone());
+        }
+
+        trace
+    }
+
 }
 
 #[cfg(test)]
@@ -250,5 +320,14 @@ mod tests {
             rp.hash(FieldElement::new(BigInt::from(57322816861100832358702415967512842988 as u128))),
             FieldElement::new(BigInt::from(89633745865384635541695204788332415101 as u128))
         );
-    }
+
+        // test trace boundaries
+        let a = FieldElement::new(BigInt::from(57322816861100832358702415967512842988 as u128));
+        let b = FieldElement::new(BigInt::from(89633745865384635541695204788332415101 as u128));
+        let trace = rp.trace(a.clone());
+
+        assert_eq!(trace[0][0], a);
+        assert_eq!(trace[trace.len()-1][0], b);
+
+    }   
 }
