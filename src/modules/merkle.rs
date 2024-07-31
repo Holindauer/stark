@@ -1,11 +1,11 @@
 extern crate blake2;
 extern crate generic_array;
 extern crate typenum;
-
 use blake2::{Blake2b, Digest};
 use generic_array::typenum::U32;
 use generic_array::GenericArray;
 
+// define the hash output size
 type OutputSize = U32; // 32 bytes (256 bits) output
 type HashOutput = GenericArray<u8, OutputSize>; // Fixed-size hash output
 

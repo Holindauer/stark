@@ -32,7 +32,7 @@ impl FieldElement {
     pub fn is_zero(&self) -> bool { self.value.is_zero() }
 
     // exponentiation
-    pub fn pow(&self, exp: i128) -> FieldElement {
+    pub fn pow(&self, exp: u128) -> FieldElement {
         let mut base = self.clone();
         let mut exp = BigInt::from(exp);
         let mut result = FieldElement::one();
@@ -220,7 +220,7 @@ mod tests {
     fn test_primitive_nth_root() {
         let n = 16;
         let root = FieldElement::primitive_nth_root(n);
-        assert_eq!(root.pow(n), FieldElement::one());
+        assert_eq!(root.pow(n as u128), FieldElement::one());
     }
 
     #[test]

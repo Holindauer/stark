@@ -1,5 +1,3 @@
-use std::arch::x86_64::_CMP_EQ_OS;
-
 use crate::modules::field::{*};
 use crate::modules::merkle::{*};
 use crate::modules::proof_stream::{*};
@@ -10,15 +8,11 @@ use num_bigint::BigInt;
 extern crate num_traits;
 extern crate num_bigint;
 use hex;
-use serde::{Serialize, Deserialize};
-
-
-use num_traits::Num;  // This trait contains the from_str_radix method
-
-
+use num_traits::Num; 
 use generic_array::typenum::U32;
 use generic_array::GenericArray;
 
+// Merkle
 type OutputSize = U32; // 32 bytes (256 bits) output
 type HashOutput = GenericArray<u8, OutputSize>; // Fixed-size hash output
 
@@ -97,7 +91,7 @@ impl Fri {
 
         let mut domain: Vec<FieldElement> = Vec::new();
         for i in 0..self.domain_length {
-            domain.push( self.offset.clone() * self.omega.pow(i as i128));
+            domain.push( self.offset.clone() * self.omega.pow(i as u128));
         }
         domain
     }
@@ -119,7 +113,7 @@ impl Fri {
             let N: usize = codeword.len();
 
             // ensure n has the right order
-            assert!(omega.pow(N as i128 - 1) == omega.inverse(), "error in commit: omega does not have the right order!");
+            assert!(omega.pow(N as u128 - 1) == omega.inverse(), "error in commit: omega does not have the right order!");
 
             // Commit merkle root to proof stream
             let root: HashOutput = Merkle::commit(&codeword.iter().map(|x| bincode::serialize(x).unwrap()).collect::<Vec<Vec<u8>>>());            
@@ -139,7 +133,7 @@ impl Fri {
             let mut new_codeword: Vec<FieldElement> = vec![];
             for i in 0..(N/2) {
                 new_codeword.push(
-                    two.inverse() * ( (one.clone() + alpha.clone() / (offset.clone() * omega.pow(i as i128))) * codeword.get(i).unwrap().clone() + (one.clone() - alpha.clone() / (offset.clone() * omega.pow(i as i128)))  * codeword.get(N/2 + i).unwrap().clone()) // long boi
+                    two.inverse() * ( (one.clone() + alpha.clone() / (offset.clone() * omega.pow(i as u128))) * codeword.get(i).unwrap().clone() + (one.clone() - alpha.clone() / (offset.clone() * omega.pow(i as u128)))  * codeword.get(N/2 + i).unwrap().clone()) // long boi
                 );
             }
             codeword = new_codeword;
@@ -289,12 +283,12 @@ impl Fri {
         }
 
         // assert that last_omega has the right order
-        assert!(last_omega.inverse() == last_omega.pow((last_codeword.len()-1) as i128));
+        assert!(last_omega.inverse() == last_omega.pow((last_codeword.len()-1) as u128));
 
         // compute interpolant
         let mut last_domain: Vec<FieldElement> = vec![];
         for i in 0..last_codeword.len() {
-            last_domain.push(last_offset.clone() * last_omega.pow(i as i128));
+            last_domain.push(last_offset.clone() * last_omega.pow(i as u128));
         }
         let poly = Polynomial::lagrange(last_domain.clone(), last_codeword.clone());
 
@@ -356,8 +350,8 @@ impl Fri {
                 }
 
                 // colinearity check 
-                let ax = offset.clone() * omega.clone().pow(a_indices[s] as i128);
-                let bx = offset.clone() * omega.pow(b_indices[s] as i128);
+                let ax = offset.clone() * omega.clone().pow(a_indices[s] as u128);
+                let bx = offset.clone() * omega.pow(b_indices[s] as u128);
                 let cx = alphas.get(r).unwrap();
                 let points = vec![(ax.value, ay.value), (bx.value, by.value), (cx.value.clone(), cy.value)];
                 if false == Polynomial::test_colinearity  (points) {
@@ -464,7 +458,7 @@ mod tests {
         // setup domain for evaluation
         let mut domain: Vec<FieldElement> = vec![];
         for i in 0..initial_codeword_length {
-            domain.push(omega.pow(i as i128).clone());
+            domain.push(omega.pow(i as u128).clone());
         }
 
         // get codeword
@@ -486,7 +480,7 @@ mod tests {
 
 
         for (idx, val) in points {
-            if polynomial.eval(omega.pow(idx as i128)) != val {
+            if polynomial.eval(omega.pow(idx as u128)) != val {
                 panic!("Polynomial evals to wrong value");
             }
         }
