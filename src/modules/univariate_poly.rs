@@ -143,7 +143,7 @@ impl Polynomial {
 
 
     // vanishing polynomial (x - c_1)(x - c_2) . . . (c - c_n)
-    pub fn vanishing_polynomial(domain: Vec<BigInt>) -> Polynomial {
+    pub fn zeroifier(domain: Vec<BigInt>) -> Polynomial {
         
         let x = Polynomial::new(vec![BigInt::from(1), BigInt::from(0)]);
         let mut acc = Polynomial::new(vec![BigInt::from(1)]);
@@ -151,7 +151,20 @@ impl Polynomial {
             acc = acc * (x.clone() - Polynomial::new(vec![d.clone()])); 
         }
 
-        acc
+        acc 
+    }
+
+    // zeroifier over domain
+    pub fn zeroifier_domain(domain: Vec<FieldElement>) -> Polynomial {
+        let x = Polynomial{coeffs: vec![FieldElement::one(), FieldElement::zero()]};
+        let mut acc = Polynomial{coeffs: vec![FieldElement::one()]};
+        for d in domain {
+
+            // (x - d)
+            acc = acc * (x.clone() - Polynomial{coeffs: vec![d]});
+        }
+
+        acc 
     }
 
     // test for colinearity
@@ -170,6 +183,27 @@ impl Polynomial {
 
         // ensure colinearity
         if poly.degree() == 1 { true } else { false }
+    }
+
+
+    pub fn pow(&self, exponent: u128) -> Self {
+        // special cases
+        if self.is_zero() { return Polynomial::new(vec![BigInt::from(0)]); }
+        if exponent == 0 { return Polynomial::new(vec![BigInt::from(1)]); }
+
+        let mut acc = Polynomial::new(vec![BigInt::from(1)]); // Start with the identity polynomial
+        let mut base = self.clone();
+
+        // Process each bit of the exponent, from least significant to most significant
+        for i in (0..exponent.leading_zeros() as u128).rev() {
+            acc = acc.clone() * acc.clone();  // Square the result
+
+            if (exponent & (1 << i)) != 0 {
+                acc = acc.clone() * base.clone();  // Multiply by base if the i-th bit is 1
+            }
+        }
+
+        acc
     }
 
 }
@@ -407,7 +441,7 @@ mod tests {
         }
 
         // create vanishing polynomial
-        let vanish_poly = Polynomial::vanishing_polynomial(vanish_at.clone());
+        let vanish_poly = Polynomial::zeroifier(vanish_at.clone());
 
         // check all zero
         for x in vanish_at{
