@@ -69,10 +69,26 @@ impl MPolynomial {
             acc = acc.clone() + prod;
         }
         acc
-}
+    }
+
+    /// Symbolically evaluates the polynomial at a given vector of univariate polynomial variables
+    pub fn eval_symbolic(&self, point: &[Polynomial]) -> Polynomial {
+        let mut acc = Polynomial::new(vec![BigInt::zero()]);  
+
+        for (k, v) in &self.dict {
+            let mut prod = Polynomial::new(vec![v.value.clone()]);  
+
+            for i in 0..k.len() {
+                prod = prod * (point[i].clone().pow(k[i]));
+            }
+            acc = acc + prod;
+        }
+
+        acc
+    }  
 
     // efficient exponentiation by squaring
-    pub fn pow(self, exponent: usize) -> Self {
+    pub fn pow(self, exponent: u128) -> Self {
         if self.is_zero() { return MPolynomial::zero(); } // 0^n = 0
         if exponent == 0 { return MPolynomial::constant(1); } // c^0 = 1
 
@@ -123,7 +139,7 @@ impl MPolynomial {
 
         for (i, coeff) in poly.coeffs.iter().rev().enumerate() {
             let coeff_val: u128 = coeff.value.clone().to_u128().unwrap();
-            let term = MPolynomial::constant(coeff_val) * x.clone().pow(i as usize);
+            let term = MPolynomial::constant(coeff_val) * x.clone().pow(i as u128);
             acc = acc + term;
         }
         acc
