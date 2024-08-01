@@ -77,10 +77,6 @@ impl FieldElement {
             new_r = temp_r - quotient * new_r;
         }
 
-        if r > one {
-            panic!("Element does not have an inverse");
-        }
-
         // Adjust negative result to be positive
         if t < zero {
             t = t + FieldElement::modulus();
