@@ -18,11 +18,11 @@ type HashOutput = GenericArray<u8, OutputSize>; // Fixed-size hash output
 
 
 pub struct Fri {
-    offset: FieldElement,
-    omega: FieldElement,
-    domain_length: usize,
-    expansion_factor: usize,
-    num_colinearity_tests: usize,
+    pub offset: FieldElement,
+    pub omega: FieldElement,
+    pub domain_length: usize,
+    pub expansion_factor: usize,
+    pub num_colinearity_tests: usize,
 }
 
 impl Fri {
@@ -438,7 +438,7 @@ mod tests {
 
         assert!(1 << log_codeword_length == initial_codeword_length, "log incorrectly computed");
 
-        let omega = FieldElement::primitive_nth_root(initial_codeword_length as i128);
+        let omega = FieldElement::primitive_nth_root(initial_codeword_length as u128);
         let generator = FieldElement::generator();
 
         // ensure valid properties for field eleemnts

@@ -185,14 +185,14 @@ impl Polynomial {
         if poly.degree() == 1 { true } else { false }
     }
 
-
+    // pow
     pub fn pow(&self, exponent: u128) -> Self {
         // special cases
         if self.is_zero() { return Polynomial::new(vec![BigInt::from(0)]); }
         if exponent == 0 { return Polynomial::new(vec![BigInt::from(1)]); }
 
         let mut acc = Polynomial::new(vec![BigInt::from(1)]); // Start with the identity polynomial
-        let mut base = self.clone();
+        let base = self.clone();
 
         // Process each bit of the exponent, from least significant to most significant
         for i in (0..exponent.leading_zeros() as u128).rev() {

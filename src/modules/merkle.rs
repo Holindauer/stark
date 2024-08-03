@@ -7,7 +7,7 @@ use generic_array::GenericArray;
 
 // define the hash output size
 type OutputSize = U32; // 32 bytes (256 bits) output
-type HashOutput = GenericArray<u8, OutputSize>; // Fixed-size hash output
+pub type HashOutput = GenericArray<u8, OutputSize>; // Fixed-size hash output
 
 pub struct Merkle;
 

@@ -5,4 +5,6 @@ pub mod modules{
     pub mod proof_stream;
     pub mod merkle;
     pub mod fri;
+    pub mod stark;
+    pub mod rescue_prime;   
 }

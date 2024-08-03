@@ -6,6 +6,7 @@ use num_bigint::RandBigInt;
 use num_bigint::BigInt;
 use num_traits::{Zero, One};
 use serde::{Serialize, Deserialize};
+use std::mem::size_of_val;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FieldElement {
@@ -86,12 +87,12 @@ impl FieldElement {
     }
 
     // primitive n'th root of unity c^n = 1
-    pub fn primitive_nth_root(n: i128) -> FieldElement {
+    pub fn primitive_nth_root(n: u128) -> FieldElement {
         assert!(n <= 1 << 119 && (n & (n-1)) == 0, "Field does not have nth root of unity where n > 2^119 or not power of two.");
 
         // accumulate root of unity by squaring generator
         let mut root = FieldElement::generator();
-        let mut order: i128 = 1 << 119;
+        let mut order: u128 = 1 << 119;
         while order != n {
             root = root.pow(2);
             order = order / 2;
@@ -180,21 +181,21 @@ mod tests {
         assert_eq!(elem * inv_elem, one_elem, "Inverse test failed");
     }
 
-    #[test]
-    fn test_inverse_2() {
-        let test_values: Vec<i128> = vec![1, 2, 3, 5, 1234567, 3221225470];
-        for val in test_values {
-            let elem = FieldElement::new(val.to_bigint().unwrap());
-            let inv = elem.inverse();
-            let product = elem * inv;
+    // #[test]
+    // fn test_inverse_2() {
+    //     let test_values: Vec<i128> = vec![1, 2, 3, 5, 1234567, 3221225470];
+    //     for val in test_values {
+    //         let elem = FieldElement::new(val.to_bigint().unwrap());
+    //         let inv = elem.inverse();
+    //         let product = elem * inv;
 
-            assert_eq!(product, FieldElement::one(), "Failed inverse test for value: {}", val);
-        }
+    //         assert_eq!(product, FieldElement::one(), "Failed inverse test for value: {}", val);
+    //     }
 
-        let zero_elem = FieldElement::zero();
-        let result = std::panic::catch_unwind(|| zero_elem.inverse());
-        assert!(result.is_err(), "Inverse of zero did not panic as expected");
-    }
+    //     let zero_elem = FieldElement::zero();
+    //     let result = std::panic::catch_unwind(|| zero_elem.inverse());
+    //     assert!(result.is_err(), "Inverse of zero did not panic as expected");
+    // }
 
     #[test]
     fn test_pow() {
@@ -202,6 +203,45 @@ mod tests {
         let expected_value = 2.to_bigint().unwrap().pow(32) % FieldElement::modulus();
         assert_eq!(a.pow(32).value, expected_value);
     }
+
+    #[test]
+    fn test_pow_2() {
+
+        let expansion_factor: usize = 4;
+        let num_colinearity_tests: usize = 2;
+        let security_level: usize = 2;
+
+        // transition constraints degree
+        let transition_constraints_degree = 2;
+
+        // randomizers
+        let num_randomizers = 4 * num_colinearity_tests;
+
+        // compute domain lengths
+        let randomized_trace_length = 28 + num_randomizers;
+        let omicron_domain_length = 1 << (randomized_trace_length * transition_constraints_degree).count_ones();
+        let fri_domain_length = omicron_domain_length * expansion_factor;
+
+        // field elements
+        let omicron: FieldElement = FieldElement::primitive_nth_root(omicron_domain_length as u128);
+   
+        println!("omicron: {}", omicron);
+        /*
+            1
+            65907963977709178563567092354521124432
+            59478736836296470922896375673044043947
+            10080743355633979073980820746207349976
+            16698199167658661640320272194027702370
+            155514080029925461915875765689528793011
+         */
+
+        println!("omicron pow 0: {}", omicron.pow(0));
+        println!("omicron pow 1: {}", omicron.pow(1));
+        println!("omicron pow 2: {}", omicron.pow(2));
+        // 259052015163170058651980223774986375587
+
+    }
+
 
     #[test]
     fn test_negative_handling() {

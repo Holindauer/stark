@@ -8,11 +8,11 @@ use num_traits::ToPrimitive;
 
 // Rescue Prime Hash Function
 pub struct RescuePrime {
-    pub p: BigInt,
-    pub m: usize,
-    pub rate: usize,
+    pub p: BigInt,   // prime 
+    pub m: usize,    // state width
+    pub rate: usize, // rate for spone func
     pub capacity: usize,
-    pub N: usize,
+    pub N: usize, 
     pub alpha: BigInt, // smallest invertible power
     pub alpha_inv: BigInt,
     pub MDS: Vec<Vec<FieldElement>>,
@@ -308,6 +308,8 @@ impl RescuePrime {
     // round constant polynomials
     pub fn round_constants_polynomials(&self, omicron: FieldElement) -> (Vec<MPolynomial>, Vec<MPolynomial>) {
 
+        // ! Issue here
+
         // first step constants
         let mut first_step_constants: Vec<MPolynomial> = vec![];
         for i in 0..self.m {    
@@ -325,6 +327,7 @@ impl RescuePrime {
 
             // lift uni to multivariate
             let multivariate: MPolynomial = MPolynomial::lift(&univariate, 0);
+
 
             // push to first step constants
             first_step_constants.push(multivariate);
@@ -468,6 +471,8 @@ mod tests {
                 let mut point = vec![omicron.clone().pow(o as u128)];
                 point.extend(previous_state.clone());
                 point.extend(next_state.clone());
+
+                println!("air poly {:?}", air_poly);
 
                 if air_poly.eval(&point) != FieldElement::zero() {
                     println!("Rescue prime transition condition error: air polynomial does not evaluate to zero at point: {:?}", point);
