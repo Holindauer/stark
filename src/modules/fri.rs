@@ -398,10 +398,6 @@ impl Fri {
                     &deserialized_path,
                     &bincode::serialize(cc.get(i).unwrap()).unwrap()
                 ) { return false; }
-
-
-                return true;
-
             }
 
             // square omega and offset for next round

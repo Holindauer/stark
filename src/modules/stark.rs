@@ -1,5 +1,3 @@
-use std::hash::Hash;
-
 use crate::modules::field::{*};
 use crate::modules::fri::{*};
 use crate::modules::rescue_prime::{*};
@@ -11,6 +9,10 @@ use crate::modules::merkle::{*};
 use rand::{random, RngCore};
 use num_bigint::BigInt;
 use blake2::{Blake2b, Digest};
+use std::collections::HashMap;
+use generic_array::typenum::U32;
+use generic_array::GenericArray;
+
 
 pub struct Stark {
     pub expansion_factor: usize,
@@ -188,7 +190,7 @@ impl Stark {
     // max degree
     fn max_degree(&self, transition_constraints: Vec<MPolynomial>) -> usize {
        let md: usize = *self.transition_quotient_degree_bounds(transition_constraints).iter().max().unwrap(); 
-        1 << ((std::mem::size_of_val(&md) * 8) - md.leading_zeros() as usize)
+        (1 << ((std::mem::size_of_val(&md) * 8) - md.leading_zeros() as usize))- 1
     }
 
     // smaple weights 
@@ -338,6 +340,10 @@ impl Stark {
         );
         proof_stream.push(hex::encode(randomizer_root));
 
+        println!("after randomizer polynomial proof stream len {}", proof_stream.objects.len());
+
+
+
         /*
             get weights for nonlinear combination
               - 1 randomizer
@@ -355,7 +361,7 @@ impl Stark {
     
         // compute terms of nonlinear combination polynomial
         let x = Polynomial{coeffs: vec![FieldElement::one(), FieldElement::zero()]};
-        let max_degree = self.max_degree(transition_constraints.clone());
+        let max_degree = self.max_degree(transition_constraints.clone()); 
         let mut terms: Vec<Polynomial> = vec![];
         terms.push(randomizer_poly);
         for i in 0..transition_quotients.len() {
@@ -374,12 +380,13 @@ impl Stark {
         for i in 0..terms.len() {
             combination = combination + (Polynomial{coeffs: vec![weights[i].clone()]} * terms[i].clone());
         }
-
         // compute matching codeword
         let combined_codeword = combination.eval_domain(fri_domain.clone());
 
         // prove low degree of combination polynomial w/ fri, and collect indices
         let indices = self.fri.prove(combined_codeword, &mut proof_stream);
+
+        println!("after fri proof stream len {}", proof_stream.objects.len());
 
         // process indices
         let mut duplicated_indices: Vec<usize> = indices.clone();
@@ -392,40 +399,238 @@ impl Stark {
         }
         quadrupled_indices.sort();
 
+
         // open indicated positions in the boudnary quotient codeword
         for bqc in boundary_quotient_codewords {
-            for i in quadrupled_indices.iter() {
+            for i in quadrupled_indices.clone() {
 
                 // commit to element of codeword at index
-                proof_stream.push(serde_json::to_string(&bqc[*i]).unwrap());
-        
+                proof_stream.push(serde_json::to_string(&bqc[i]).unwrap());
+
                 // get authentication path for i'th word in codeword
                 let serialized_bqc: Vec<Vec<u8>> = bqc.iter() 
                 .map(|element| bincode::serialize(element).unwrap()).collect();// convert to bytes
-                let auth_path: String = serde_json::to_string(&Merkle::open(*i, &serialized_bqc)).unwrap();
+                let auth_path: String = serde_json::to_string(&Merkle::open(i, &serialized_bqc)).unwrap();
 
                 // commit to auth path
                 proof_stream.push(auth_path);
             }
         }
 
+        println!("after pushing bqc stream len {}", proof_stream.objects.len());
+
+
         // ... as well as in the randomizer
-        for i in quadrupled_indices.iter() {
+        for i in quadrupled_indices.clone() {
 
             // commit to i'th word in codeword
-            proof_stream.push(serde_json::to_string(&randomizer_codeword[*i]).unwrap());
+            proof_stream.push(serde_json::to_string(&randomizer_codeword[i]).unwrap());
             
             // get authentication path for i'th word in codeword
             let serialized_rc: Vec<Vec<u8>> = randomizer_codeword.iter() 
             .map(|element| bincode::serialize(element).unwrap()).collect();// convert to bytes
-            let auth_path: String = serde_json::to_string(&Merkle::open(*i, &serialized_rc)).unwrap();
+            let auth_path: String = serde_json::to_string(&Merkle::open(i, &serialized_rc)).unwrap();
 
             // commit to auth path
             proof_stream.push(auth_path);
         }
 
+        println!("after pushing randomizer proof stream len {}", proof_stream.objects.len());
+
+
         // final proof is the serialized proof stream
         proof_stream.serialize()
+    }
+
+
+    pub fn verify(
+        &self,
+        proof: Vec<u8>,
+        transition_constraints: Vec<MPolynomial>,
+        boundary: Vec<(usize, usize, FieldElement)>
+    ) -> bool{
+
+        // infer trace length from boundary conditions
+        let mut cycles: Vec<usize> = vec![];
+        for (c, r, v) in boundary.clone() { cycles.push(c); }        
+        let original_trace_length = 1 + cycles.iter().max().unwrap();
+        let randomized_trace_length = original_trace_length + self.num_randomizers;
+
+        // deserialize with right proof stream
+        let mut proof_stream = ProofStream::deserialize(&proof);
+
+        // get merkle roots of boundary quotient codewords
+        let mut boundary_quotient_roots: Vec<String> = vec![];
+        for s in 0..self.num_registers {
+            boundary_quotient_roots.push(proof_stream.pull());
+        }
+
+        // get merkle root of randomizer polynomial
+        let randomizer_root: String = proof_stream.pull();
+
+        println!("read idx after randomizer root {}", proof_stream.read_idx);
+
+        // get weights for nonlinear combination
+        let weights = self.sample_weights(
+            1 + 2*transition_constraints.len() + 2*self.boundary_interpolants(boundary.clone()).len(),
+            proof_stream.verifier_fiat_shamir(32)
+        );
+
+        // verify low degree of combination polynomial
+        let mut polynomial_values: Vec<(usize, FieldElement)> = vec![];
+        let mut verifier_accepts: bool = self.fri.verify( &mut proof_stream, &mut polynomial_values);
+        polynomial_values.sort_by_key(|iv| iv.0); // sort
+
+
+        println!("read idx after fri {}", proof_stream.read_idx);
+
+        if verifier_accepts == false { 
+            println!("combination polynomial is not of low degree");
+            return false; 
+        }
+        
+        // isolate indices and values
+        let indices: Vec<usize> = polynomial_values.iter().map(|iv| iv.0).collect();
+        let values: Vec<FieldElement> = polynomial_values.iter().map(|iv| iv.1.clone()).collect();
+
+
+        // read and verify leafs which are elements of boundary quotient codewords
+        let mut duplicated_indices: Vec<usize> = indices.clone();
+        for i in indices.clone() { duplicated_indices.push((i + self.expansion_factor) % self.fri.domain_length)};
+        duplicated_indices.sort();
+
+        // collect leafs/auth paths into vec, verify auth paths
+        let mut leafs: Vec<HashMap<usize, FieldElement>> = vec![];
+        for r in 0..boundary_quotient_roots.len() {
+
+            let mut hash_map = HashMap::new();
+            for i in duplicated_indices.clone() {
+                
+                // get leaf value and insert into map
+                let leaf_value: FieldElement = serde_json::from_str(&proof_stream.pull()).unwrap();
+                hash_map.insert(i.clone(), leaf_value.clone());
+
+                // get auth_path for leaf
+                let auth_path: Vec<HashOutput> = serde_json::from_str(&proof_stream.pull()).unwrap();
+
+                // verify auth path
+                let merkle_verification: bool = Merkle::verify(
+                    &GenericArray::clone_from_slice(&hex::decode(boundary_quotient_roots[r].clone()).unwrap()), // decode --> GenericArray
+                    i,
+                    &auth_path,
+                    &bincode::serialize(&leaf_value).unwrap()
+                );
+                
+                // update verifier acceptance
+                let verifier_accepts = verifier_accepts && merkle_verification;
+                if !verifier_accepts {
+                    return false;
+                }
+            }
+            leafs.push(hash_map);
+        }
+
+        // read and verify randomizer leafs
+        let mut randomizer: HashMap<usize, FieldElement> = HashMap::new();
+        for i in duplicated_indices {
+
+            // get leaf value and insert into map
+            let leaf_value: FieldElement = serde_json::from_str(&proof_stream.pull()).unwrap();
+            randomizer.insert(i.clone(), leaf_value.clone());
+            
+            // get auth_path for leaf
+            let auth_path: Vec<HashOutput> = serde_json::from_str(&proof_stream.pull()).unwrap();
+        
+            // verify auth path
+            let merkle_verification: bool = Merkle::verify(
+                &GenericArray::clone_from_slice(&hex::decode(randomizer_root.clone()).unwrap()), // decode --> GenericArray
+                i,
+                &auth_path,
+                &bincode::serialize(&leaf_value).unwrap()
+            );
+            
+            // update verifier acceptance
+            let verifier_accepts = verifier_accepts && merkle_verification;
+            if !verifier_accepts {
+                return false;
+            }
+            
+        }
+
+        // verify leafs of combination polynomial
+        for i in 0..indices.len() {
+            let current_index = indices[i];
+
+            // get trace values by applying a correction ot the boundary quotient values (which are the leafs)
+            let domain_current_index = self.generator.clone() * (self.omega.pow(current_index as u128));
+            let next_index = (current_index + self.expansion_factor) % self.fri.domain_length;
+            let domain_next_index = self.generator.clone() * (self.omega.pow(next_index as u128));
+
+            // current trace
+            let mut current_trace: Vec<FieldElement> = vec![];
+            for i in 0..self.num_registers { current_trace.push(FieldElement::zero());}
+
+            // next trace
+            let mut next_trace: Vec<FieldElement> = vec![];
+            for i in 0..self.num_registers { next_trace.push(FieldElement::zero());}
+
+            for s in 0..self.num_registers {
+                // retrieve zeroifier and interpolant
+                let zeroifier = self.boundary_zeroifiers(boundary.clone())[s].clone();
+                let interpolant = self.boundary_interpolants(boundary.clone())[s].clone();
+                
+                
+                current_trace[s] = leafs[s].get(&current_index).unwrap().clone() * zeroifier.eval(domain_current_index.clone()) + interpolant.eval(domain_current_index.clone());
+                next_trace[s] = leafs[s].get(&next_index).unwrap().clone() * zeroifier.eval(domain_next_index.clone()) + interpolant.eval(domain_next_index.clone());
+            }
+            
+            // get eval point
+            let mut point: Vec<FieldElement> = vec![];
+            point.push(domain_current_index.clone());
+            point.extend(current_trace);
+            point.extend(next_trace);
+
+            // eval transition constraints
+            let mut transition_constraints_values: Vec<FieldElement> = vec![];
+            for s in 0..transition_constraints.len() {
+
+                transition_constraints_values.push(
+                    transition_constraints[s].clone().eval(&point)
+                )
+            }
+
+            let counter = 0;
+            let mut terms: Vec<FieldElement> = vec![];
+            terms.push(randomizer.get(&current_index).unwrap().clone());
+            for s in 0..transition_constraints_values.len(){
+                let tcv = transition_constraints_values[s].clone();
+                let quotient = tcv / self.transition_zeroifier().eval(domain_current_index.clone());
+                terms.push(quotient.clone());
+                let shift = self.max_degree(transition_constraints.clone()) - self.transition_quotient_degree_bounds(transition_constraints.clone())[s];
+                terms.push(quotient * (domain_current_index.pow(shift as u128)))
+            }
+            for s in 0..self.num_registers {
+                let bqv = leafs[s].get(&current_index).unwrap().clone();
+                terms.push(bqv.clone());
+                let shift = self.max_degree(transition_constraints.clone()) - self.boundary_quotient_degree_bounds(randomized_trace_length, boundary.clone())[s];
+                terms.push(bqv * (domain_current_index.pow(shift as u128)));
+            }
+            
+            // construct combination
+            let mut combination: FieldElement = FieldElement::zero();
+            for j in 0..terms.len() {
+                combination = combination + (terms[j].clone() * weights[j].clone())
+            }
+            
+            // verify against combination polynomail value
+            verifier_accepts = verifier_accepts && (combination == values[i]);
+            if !verifier_accepts {
+                return false;
+            }
+
+        }
+
+        verifier_accepts
     }
 }
 
@@ -470,8 +675,13 @@ mod tests {
             let trace: Vec<Vec<FieldElement>> = rp.trace(input_element.clone());
             let air: Vec<MPolynomial> = rp.transition_constraints(stark.omicron.clone());
             let boundary: Vec<(usize, usize, FieldElement)> = rp.boundary_constraints(output_element.clone());
-            let proof = stark.prove(trace, air, boundary);
+            let proof = stark.prove(trace, air.clone(), boundary.clone());
             println!("num bytes in proof: {:?}", proof.len());
+
+            // verify
+            let verdict = stark.verify(proof, air.clone(), boundary.clone());
+
+            assert!(verdict);
 
             break;
         }

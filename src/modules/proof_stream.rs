@@ -6,8 +6,8 @@ use std::vec;
 
 #[derive(Serialize, Deserialize)]
 pub struct ProofStream {
-    objects: Vec<String>,
-    read_idx: usize,
+    pub objects: Vec<String>,
+    pub read_idx: usize,
 }
 
 impl ProofStream {
