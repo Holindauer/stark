@@ -63,9 +63,24 @@ The codebase implements a complete STARK proof system with these core components
 
 ## Known Issues
 
-1. **STARK Verification Bug**: The complete STARK proof verification fails despite all component tests passing
+1. **STARK Verification Bug**: The complete STARK proof verification fails at final combination check
+   - **Progress Made**: Fixed multiple synchronization issues, field arithmetic, and verified most components work correctly
+   - **Current Issue**: Combination polynomial value computed by verifier doesn't match what FRI verified
+   - **Verified Working**: Weights, Fiat-Shamir, randomizer values, boundary quotients all match between prover/verifier
+   - **Next Steps**: Likely issue in polynomial evaluation or constraint handling
+
 2. **Empty main.rs**: The binary entry point is not implemented (library-only usage)
 3. **Unused imports**: Some modules have warnings about unused imports that could be cleaned up
+
+## Debugging Progress
+
+The STARK verification has been significantly improved through the following fixes:
+- Fixed index synchronization issues between prover and verifier
+- Fixed FRI to return correct number of indices (both a and b indices)
+- Fixed negative value handling in field arithmetic
+- Verified Fiat-Shamir transform produces consistent results between prover/verifier
+- Confirmed Merkle tree operations work correctly
+- Polynomial coefficient ordering confirmed as highest-to-lowest (intentional design choice)
 
 ## Development Tips
 

@@ -351,7 +351,7 @@ impl Stark {
         );
         proof_stream.push(hex::encode(randomizer_root));
 
-        println!("after randomizer polynomial proof stream len {}", proof_stream.objects.len());
+        // println!("after randomizer polynomial proof stream len {}", proof_stream.objects.len());
 
 
 
@@ -658,10 +658,18 @@ impl Stark {
             // eval transition constraints
             let mut transition_constraints_values: Vec<FieldElement> = vec![];
             for s in 0..transition_constraints.len() {
-
-                transition_constraints_values.push(
-                    transition_constraints[s].clone().eval(&point)
-                )
+                let tc_value = transition_constraints[s].clone().eval(&point);
+                transition_constraints_values.push(tc_value.clone());
+                if i == 0 && s == 0 {
+                    println!("DEBUG Verifier: Evaluating transition constraint {} at point", s);
+                    println!("  Point has {} elements", point.len());
+                    println!("  Point[0] (x): {}", point[0].value);
+                    println!("  Point[1] (current state[0]): {}", point[1].value);
+                    println!("  Point[2] (current state[1]): {}", point[2].value);
+                    println!("  Point[3] (next state[0]): {}", point[3].value);
+                    println!("  Point[4] (next state[1]): {}", point[4].value);
+                    println!("  Result: {}", tc_value.value);
+                }
             }
 
             let counter = 0;
