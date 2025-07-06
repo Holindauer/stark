@@ -2,23 +2,11 @@
 
 A complete Rust implementation of STARKs (Scalable Transparent ARguments of Knowledge) with Fast Reed-Solomon Interactive Oracle Proofs (FRI). Based on [Alan Szepieniec's excellent STARK Anatomy tutorial](https://aszepieniec.github.io/stark-anatomy/).
 
-## ✅ Status
+## Overview
 
-**All components fully functional!** The STARK proof system now successfully generates and verifies proofs for the Rescue-Prime hash function.
+A fully functional STARK proof system that generates and verifies proofs for computations. The implementation uses the Rescue-Prime hash function as an example computation and includes all necessary components for a complete STARK proof system.
 
-### Test Status
-- ✅ Field arithmetic
-- ✅ Polynomial algebra (with NTT optimizations)
-- ✅ Merkle trees
-- ✅ FRI protocol
-- ✅ **STARK prover/verifier** (bug fixed!)
-
-### Recent Improvements
-- **Fixed critical bug**: Polynomial composition for transition constraints now correctly evaluates `p(x * omicron)`
-- **Performance boost**: Implemented Number Theoretic Transform (NTT) for O(n log n) polynomial operations
-- **Comprehensive benchmarks**: Added Criterion benchmarks for all components
-
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 # Run all tests
@@ -32,17 +20,16 @@ cargo bench stark_benchmarks
 cargo bench polynomial_benchmarks
 ```
 
-## 📊 Performance
+## Performance
 
-With the recent optimizations:
 - **STARK Prove**: ~12 seconds (small configuration)
 - **STARK Verify**: ~200-500ms
 - **Field Operations**: ~460-490 nanoseconds
-- **NTT Evaluation**: O(n log n) vs O(n²) for Lagrange interpolation
+- **NTT Evaluation**: O(n log n) for power-of-2 domains
 
 See the [benchmarks README](benches/README.md) for detailed performance analysis.
 
-## 🏗️ Architecture
+## Architecture
 
 ### Core Components
 
@@ -78,7 +65,7 @@ See the [benchmarks README](benches/README.md) for detailed performance analysis
 - **Post-Quantum Security**: Based on hash functions and information theory
 - **Optimized Operations**: NTT for fast polynomial operations on power-of-2 domains
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run all tests
@@ -94,7 +81,7 @@ cargo test stark
 cargo test -- --nocapture
 ```
 
-## 📈 Benchmarking
+## Benchmarking
 
 The project includes comprehensive Criterion benchmarks:
 
@@ -112,7 +99,7 @@ cargo bench -- --baseline main
 
 Benchmark reports are generated in `target/criterion/`.
 
-## 🔧 Development
+## Development
 
 ### Building
 ```bash
@@ -129,13 +116,13 @@ cargo doc --open
 cargo tarpaulin -o html
 ```
 
-## 📚 Learning Resources
+## Learning Resources
 
 - [STARK Anatomy Tutorial](https://aszepieniec.github.io/stark-anatomy/) - Original tutorial this implementation is based on
 - [STARK Paper](https://eprint.iacr.org/2018/046.pdf) - Original STARK paper by Ben-Sasson et al.
 - [FRI Paper](https://eccc.weizmann.ac.il/report/2017/134/) - Fast Reed-Solomon IOP paper
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit pull requests or open issues.
 
@@ -145,11 +132,11 @@ Contributions are welcome! Please feel free to submit pull requests or open issu
 - More comprehensive examples
 - Documentation improvements
 
-## 📄 License
+## License
 
 This project is open source under the MIT license.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Alan Szepieniec for the excellent STARK Anatomy tutorial
 - The StarkWare team for pioneering STARK technology
