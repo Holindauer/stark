@@ -1,4 +1,5 @@
 use crate::modules::field::{*};
+use crate::modules::ntt::{*};
 use std::vec;
 use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::fmt;
@@ -41,7 +42,27 @@ impl Polynomial {
 
     // evaluate over a domain of field elements
     pub fn eval_domain(&self, domain: Vec<FieldElement>) -> Vec<FieldElement> {
+        let n = domain.len();
+        
+        // For power-of-2 domains that are consecutive powers of unity, use NTT
+        if n.is_power_of_two() && n >= 8 && Self::is_consecutive_powers_of_unity(&domain) {
+            return self.eval_domain_ntt(n);
+        }
+        
+        // Traditional evaluation
         domain.iter().map(|x| self.eval(x.clone())).collect()
+    }
+    
+    // Fast domain evaluation using NTT
+    fn eval_domain_ntt(&self, domain_size: usize) -> Vec<FieldElement> {
+        let ntt = NTT::new(domain_size);
+        
+        // Our coefficients are highest to lowest, but NTT expects lowest to highest
+        let mut padded_coeffs = self.coeffs.clone();
+        padded_coeffs.reverse(); // Convert to lowest-to-highest order
+        padded_coeffs.resize(domain_size, FieldElement::zero());
+        
+        ntt.evaluate(padded_coeffs)
     }
 
     // get degree of polynomial
@@ -101,6 +122,24 @@ impl Polynomial {
         assert_eq!(x.len(), y.len(), "x and y must be the same length");
 
         let n = x.len();
+        
+        // For small sizes or non-power-of-2, fall back to traditional Lagrange
+        if n <= 8 || !n.is_power_of_two() {
+            return Self::lagrange_traditional(x, y);
+        }
+        
+        // Check if x values are consecutive powers of a root of unity
+        if Self::is_consecutive_powers_of_unity(&x) {
+            return Self::lagrange_ntt(y);
+        }
+        
+        // Fall back to traditional method
+        Self::lagrange_traditional(x, y)
+    }
+    
+    // Traditional O(n²) Lagrange interpolation
+    fn lagrange_traditional(x: Vec<FieldElement>, y: Vec<FieldElement>) -> Polynomial {
+        let n = x.len();
         let mut p = Polynomial::new(vec![]); // Start with the zero polynomial
 
         for i in 0..n {
@@ -116,6 +155,36 @@ impl Polynomial {
         }
 
         p
+    }
+    
+    // Fast O(n log n) interpolation using NTT for consecutive powers of unity
+    fn lagrange_ntt(evaluations: Vec<FieldElement>) -> Polynomial {
+        let n = evaluations.len();
+        let ntt = NTT::new(n);
+        let mut coeffs = ntt.interpolate(evaluations);
+        
+        // Coefficients from NTT are in reverse order (lowest to highest degree)
+        // but our Polynomial expects highest to lowest, so reverse them
+        coeffs.reverse();
+        
+        Polynomial { coeffs }
+    }
+    
+    // Check if x values are consecutive powers of a primitive root
+    fn is_consecutive_powers_of_unity(x: &Vec<FieldElement>) -> bool {
+        let n = x.len();
+        if n <= 1 || !n.is_power_of_two() { return false; }
+        
+        // Try to find a primitive nth root of unity
+        let omega = FieldElement::primitive_nth_root(n as u128);
+        
+        // Check if x[i] = omega^i for all i
+        for i in 0..n {
+            if x[i] != omega.pow(i as u128) {
+                return false;
+            }
+        }
+        true
     }
 
     // Scales all coefficients of the polynomial by a FieldElement
@@ -718,6 +787,57 @@ mod tests {
         println!("If coefficient order is highest to lowest, this should be 11 (since x^2 + 2*x + 3 = 4 + 4 + 3 = 11)");
         println!("If coefficient order is lowest to highest, this should be 17 (since 1 + 2*x + 3*x^2 = 1 + 4 + 12 = 17)");
         assert_eq!(result3.value, BigInt::from(11), "Coefficients are stored highest to lowest degree");
+    }
+    
+    #[test]
+    fn test_ntt_interpolation_performance() {
+        // Test NTT-based interpolation vs traditional
+        let n = 16; // Power of 2
+        let omega = FieldElement::primitive_nth_root(n as u128);
+        
+        // Create domain as consecutive powers of omega
+        let domain: Vec<FieldElement> = (0..n).map(|i| omega.pow(i as u128)).collect();
+        
+        // Create some test evaluations (polynomial 1 + 2x + 3x^2)
+        let test_poly = Polynomial::new(vec![BigInt::from(1), BigInt::from(2), BigInt::from(3)]);
+        let evaluations = test_poly.eval_domain(domain.clone());
+        
+        // Test both methods give same result
+        let poly_traditional = Polynomial::lagrange_traditional(domain.clone(), evaluations.clone());
+        let poly_ntt = Polynomial::lagrange_ntt(evaluations.clone());
+        
+        // Check they evaluate to the same values at test points
+        for i in 0..n {
+            let eval_traditional = poly_traditional.eval(domain[i].clone());
+            let eval_ntt = poly_ntt.eval(domain[i].clone());
+            assert_eq!(eval_traditional, eval_ntt, "NTT and traditional interpolation differ at point {}", i);
+        }
+        
+        println!("NTT interpolation test passed for size {}", n);
+    }
+    
+    #[test]
+    fn test_ntt_evaluation_performance() {
+        // Test NTT-based evaluation vs traditional  
+        let n = 32; // Power of 2
+        let omega = FieldElement::primitive_nth_root(n as u128);
+        
+        // Create domain as consecutive powers of omega
+        let domain: Vec<FieldElement> = (0..n).map(|i| omega.pow(i as u128)).collect();
+        
+        // Create test polynomial
+        let test_poly = Polynomial::new(vec![BigInt::from(1), BigInt::from(2), BigInt::from(3), BigInt::from(4)]);
+        
+        // Test both evaluation methods
+        let evals_traditional: Vec<FieldElement> = domain.iter().map(|x| test_poly.eval(x.clone())).collect();
+        let evals_ntt = test_poly.eval_domain_ntt(n);
+        
+        // Check they give same results
+        for i in 0..n {
+            assert_eq!(evals_traditional[i], evals_ntt[i], "NTT and traditional evaluation differ at point {}", i);
+        }
+        
+        println!("NTT evaluation test passed for size {}", n);
     }
 }
 

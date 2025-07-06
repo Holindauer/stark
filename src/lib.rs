@@ -7,4 +7,5 @@ pub mod modules{
     pub mod fri;
     pub mod stark;
     pub mod rescue_prime;   
+    pub mod ntt;
 }
