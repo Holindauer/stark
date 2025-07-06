@@ -701,10 +701,13 @@ impl Stark {
                 let zeroifier = self.boundary_zeroifiers(boundary.clone())[s].clone();
                 let interpolant = self.boundary_interpolants(boundary.clone())[s].clone();
                 
-                
+                // Current trace value: reconstruct from boundary quotient and interpolant
                 let current_trace_value = leafs[s].get(&current_index).unwrap().clone() * zeroifier.eval(domain_current_index.clone()) + interpolant.eval(domain_current_index.clone());
-                let next_trace_value = leafs[s].get(&next_index).unwrap().clone() * zeroifier.eval(domain_next_index.clone()) + interpolant.eval(domain_next_index.clone());
                 current_trace[s] = current_trace_value;
+                
+                // Next trace value: evaluate at the next trace domain point (current * omicron)
+                let trace_next_point = domain_current_index.clone() * self.omicron.clone();
+                let next_trace_value = leafs[s].get(&next_index).unwrap().clone() * zeroifier.eval(trace_next_point.clone()) + interpolant.eval(trace_next_point.clone());
                 next_trace[s] = next_trace_value;
             }
             
