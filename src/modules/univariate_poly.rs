@@ -67,15 +67,21 @@ impl Polynomial {
 
     // get degree of polynomial
     pub fn degree(&self) -> usize {
-        let mut degree = self.coeffs.len() - 1;
-        let zero = FieldElement::zero();
-
-        // remove trailing zeros
-        for c in self.coeffs.iter() {
-            if c != &zero { break; }
-            degree -= 1;
+        if self.coeffs.is_empty() {
+            return 0;
         }
-        degree
+        
+        let zero = FieldElement::zero();
+        
+        // Find the highest non-zero coefficient
+        for (i, c) in self.coeffs.iter().enumerate() {
+            if c != &zero {
+                return self.coeffs.len() - 1 - i;
+            }
+        }
+        
+        // All coefficients are zero - degree is 0
+        0
     }
 
     // checks for zero polynomial
@@ -191,6 +197,27 @@ impl Polynomial {
     pub fn scale(&self, factor: &FieldElement) -> Polynomial {
         let scaled_coeffs: Vec<FieldElement> = self.coeffs.iter().map(|coeff| coeff.clone() * factor.clone()).collect();
         Polynomial::new(scaled_coeffs.iter().map(|x| x.value.clone()).collect())
+    }
+    
+    // Polynomial composition: returns self(other(x))
+    pub fn compose(&self, other: &Polynomial) -> Polynomial {
+        if self.is_zero() {
+            return Polynomial::new(vec![BigInt::from(0)]);
+        }
+        
+        let mut result = Polynomial::new(vec![BigInt::from(0)]);
+        let mut power_of_other = Polynomial::new(vec![BigInt::from(1)]); // other^0 = 1
+        
+        // Use Horner's method: p(x) = a_n*x^n + a_{n-1}*x^{n-1} + ... + a_1*x + a_0
+        // = ((a_n*x + a_{n-1})*x + a_{n-2})*x + ... + a_0
+        // For composition: p(q(x)) = a_n*q(x)^n + a_{n-1}*q(x)^{n-1} + ... + a_1*q(x) + a_0
+        
+        for coeff in self.coeffs.iter().rev() { // Start from lowest degree (highest index)
+            result = result + (Polynomial::new(vec![coeff.value.clone()]) * power_of_other.clone());
+            power_of_other = power_of_other * other.clone();
+        }
+        
+        result
     }
 
     // Save the polynomial to a JSON file

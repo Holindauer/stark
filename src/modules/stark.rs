@@ -314,8 +314,14 @@ impl Stark {
 
 
         point.extend(trace_polynomials.clone());
+        // For next trace values, we need to evaluate trace polynomials at x * omicron
+        // This means composing p(x) with (x * omicron)
         for tp in trace_polynomials.clone() {
-            point.push(tp.scale(&self.omicron.clone()));
+            // Create polynomial representing x * omicron
+            let x_times_omicron = Polynomial::new(vec![self.omicron.value.clone(), BigInt::from(0)]);
+            // Compose tp with x_times_omicron: tp(x * omicron)
+            let tp_next = tp.compose(&x_times_omicron);
+            point.push(tp_next);
         }   
 
         // symbolically evaluate transition constraints
@@ -328,8 +334,111 @@ impl Stark {
 
         // divide out zeroifier
         let mut transition_quotients: Vec<Polynomial> = vec![];
-        for tp in transition_polynomials {
-            transition_quotients.push(tp / self.transition_zeroifier());
+        let tz = self.transition_zeroifier();
+        println!("DEBUG: Transition zeroifier degree: {}", tz.degree());
+        println!("DEBUG: Transition zeroifier leading coeff: {}", tz.coeffs[0].value);
+        
+        // Check if transition polynomials actually evaluate to zero at zeroifier roots
+        let zeroifier_domain: Vec<FieldElement> = self.omicron_domain[0..(self.original_trace_length-1)].to_vec();
+        println!("DEBUG: Checking transition polynomial values at zeroifier roots...");
+        
+        // Also check what the trace values are at these points and if transition constraints are satisfied
+        println!("DEBUG: Trace length: {}, Randomized trace length: {}", self.original_trace_length, trace.len());
+        
+        for (i, root) in zeroifier_domain.iter().take(3).enumerate() {
+            println!("DEBUG: At zeroifier root {}: {}", i, root.value);
+            
+            // Get trace values at this cycle
+            if i < trace.len() - 1 {  // Make sure we have next cycle
+                let current_cycle = &trace[i];
+                let next_cycle = &trace[i + 1];
+                
+                println!("  Current cycle {}: {:?}", i, current_cycle.iter().map(|x| x.value.to_string()).collect::<Vec<_>>());
+                println!("  Next cycle {}: {:?}", i+1, next_cycle.iter().map(|x| x.value.to_string()).collect::<Vec<_>>());
+                
+                // Check if trace polynomials interpolate correctly
+                for (reg_idx, tp) in trace_polynomials.iter().enumerate() {
+                    let tp_eval = tp.eval(root.clone());
+                    let expected_value = &current_cycle[reg_idx];
+                    println!("  Trace poly {} eval: {}, expected: {}", reg_idx, tp_eval.value, expected_value.value);
+                    if tp_eval != *expected_value {
+                        println!("  ERROR: Trace polynomial {} doesn't interpolate correctly!", reg_idx);
+                    }
+                }
+                
+                // Check next trace value (at root * omicron)
+                let next_root = root.clone() * self.omicron.clone();
+                for (reg_idx, tp) in trace_polynomials.iter().enumerate() {
+                    let tp_next_eval = tp.eval(next_root.clone());
+                    let expected_next_value = &next_cycle[reg_idx];
+                    println!("  Trace poly {} next eval: {}, expected next: {}", reg_idx, tp_next_eval.value, expected_next_value.value);
+                    if tp_next_eval != *expected_next_value {
+                        println!("  ERROR: Trace polynomial {} doesn't interpolate next value correctly!", reg_idx);
+                    }
+                }
+                
+                // Create evaluation point for transition constraints
+                let mut eval_point = vec![root.clone()];
+                eval_point.extend(current_cycle.clone());
+                eval_point.extend(next_cycle.clone());
+                
+                // Check if transition constraints are satisfied numerically
+                for (j, tc) in transition_constraints.iter().enumerate() {
+                    let tc_eval = tc.eval(&eval_point);
+                    println!("  TC {} numeric eval: {}", j, tc_eval.value);
+                    if tc_eval.value != BigInt::from(0) {
+                        println!("  WARNING: TC {} is NOT zero numerically at cycle {}", j, i);
+                    }
+                }
+            }
+            
+            // Check polynomial evaluation
+            for (j, tp) in transition_polynomials.iter().enumerate() {
+                let tp_eval = tp.eval(root.clone());
+                println!("  TP {} evaluates to: {}", j, tp_eval.value);
+                if tp_eval.value != BigInt::from(0) {
+                    println!("  WARNING: TP {} is NOT zero at zeroifier root {}", j, i);
+                }
+            }
+        }
+        
+        for (i, tp) in transition_polynomials.iter().enumerate() {
+            println!("DEBUG: Transition polynomial {} degree: {}", i, tp.degree());
+            println!("DEBUG: Transition polynomial {} leading coeff: {}", i, tp.coeffs[0].value);
+            
+            let quotient = tp.clone() / tz.clone();
+            transition_quotients.push(quotient.clone());
+            
+            println!("DEBUG: Quotient {} degree: {}", i, quotient.degree());
+            if quotient.coeffs.len() > 0 {
+                println!("DEBUG: Quotient {} leading coeff: {}", i, quotient.coeffs[0].value);
+            }
+            
+            // Debug: verify division is correct by checking tp = quotient * tz + remainder
+            let product = quotient.clone() * tz.clone();
+            let remainder = tp.clone() - product.clone();
+            
+            println!("DEBUG: Division verification for TP {}:", i);
+            println!("  Original degree: {}, Product degree: {}", tp.degree(), product.degree());
+            println!("  Remainder degree: {}", remainder.degree());
+            
+            // Check if remainder is small (should be near zero if division is exact)
+            if remainder.degree() >= tz.degree() {
+                println!("DEBUG: Division verification failed for transition polynomial {}", i);
+                println!("  Remainder degree: {}, Zeroifier degree: {}", remainder.degree(), tz.degree());
+            }
+            
+            // Additional check: evaluate at a random point and compare
+            let test_point = FieldElement::new(BigInt::from(42));
+            let tp_eval = tp.eval(test_point.clone());
+            let quotient_eval = quotient.eval(test_point.clone());
+            let tz_eval = tz.eval(test_point.clone());
+            let product_eval = quotient_eval.clone() * tz_eval.clone();
+            
+            println!("DEBUG: At test point 42:");
+            println!("  TP eval: {}", tp_eval.value);
+            println!("  Quotient * Zeroifier eval: {}", product_eval.value);
+            println!("  Difference: {}", (tp_eval.clone() - product_eval.clone()).value);
         }
 
         // create randomizer polynomial
@@ -434,6 +543,17 @@ impl Stark {
         for (tq_idx, tq) in transition_quotients.iter().enumerate() {
             let tq_eval = tq.eval(domain_point.clone());
             println!("DEBUG Prover: TQ {} eval at domain point: {}", tq_idx, tq_eval.value);
+            
+            // Also check if the transition polynomial evaluates correctly
+            let tp_eval = transition_polynomials[tq_idx].eval(domain_point.clone());
+            let tz_eval = self.transition_zeroifier().eval(domain_point.clone());
+            let expected_quotient = tp_eval.clone() / tz_eval.clone();
+            println!("DEBUG Prover: Expected TQ {} numeric quotient: {}", tq_idx, expected_quotient.value);
+            
+            if tq_eval != expected_quotient {
+                println!("DEBUG: MISMATCH in TQ {} - polynomial eval: {}, numeric eval: {}", 
+                         tq_idx, tq_eval.value, expected_quotient.value);
+            }
         }
         
         // Debug: Let's also manually evaluate the transition constraints at this numeric point
