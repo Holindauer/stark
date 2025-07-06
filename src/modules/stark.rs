@@ -335,110 +335,9 @@ impl Stark {
         // divide out zeroifier
         let mut transition_quotients: Vec<Polynomial> = vec![];
         let tz = self.transition_zeroifier();
-        println!("DEBUG: Transition zeroifier degree: {}", tz.degree());
-        println!("DEBUG: Transition zeroifier leading coeff: {}", tz.coeffs[0].value);
-        
-        // Check if transition polynomials actually evaluate to zero at zeroifier roots
-        let zeroifier_domain: Vec<FieldElement> = self.omicron_domain[0..(self.original_trace_length-1)].to_vec();
-        println!("DEBUG: Checking transition polynomial values at zeroifier roots...");
-        
-        // Also check what the trace values are at these points and if transition constraints are satisfied
-        println!("DEBUG: Trace length: {}, Randomized trace length: {}", self.original_trace_length, trace.len());
-        
-        for (i, root) in zeroifier_domain.iter().take(3).enumerate() {
-            println!("DEBUG: At zeroifier root {}: {}", i, root.value);
-            
-            // Get trace values at this cycle
-            if i < trace.len() - 1 {  // Make sure we have next cycle
-                let current_cycle = &trace[i];
-                let next_cycle = &trace[i + 1];
-                
-                println!("  Current cycle {}: {:?}", i, current_cycle.iter().map(|x| x.value.to_string()).collect::<Vec<_>>());
-                println!("  Next cycle {}: {:?}", i+1, next_cycle.iter().map(|x| x.value.to_string()).collect::<Vec<_>>());
-                
-                // Check if trace polynomials interpolate correctly
-                for (reg_idx, tp) in trace_polynomials.iter().enumerate() {
-                    let tp_eval = tp.eval(root.clone());
-                    let expected_value = &current_cycle[reg_idx];
-                    println!("  Trace poly {} eval: {}, expected: {}", reg_idx, tp_eval.value, expected_value.value);
-                    if tp_eval != *expected_value {
-                        println!("  ERROR: Trace polynomial {} doesn't interpolate correctly!", reg_idx);
-                    }
-                }
-                
-                // Check next trace value (at root * omicron)
-                let next_root = root.clone() * self.omicron.clone();
-                for (reg_idx, tp) in trace_polynomials.iter().enumerate() {
-                    let tp_next_eval = tp.eval(next_root.clone());
-                    let expected_next_value = &next_cycle[reg_idx];
-                    println!("  Trace poly {} next eval: {}, expected next: {}", reg_idx, tp_next_eval.value, expected_next_value.value);
-                    if tp_next_eval != *expected_next_value {
-                        println!("  ERROR: Trace polynomial {} doesn't interpolate next value correctly!", reg_idx);
-                    }
-                }
-                
-                // Create evaluation point for transition constraints
-                let mut eval_point = vec![root.clone()];
-                eval_point.extend(current_cycle.clone());
-                eval_point.extend(next_cycle.clone());
-                
-                // Check if transition constraints are satisfied numerically
-                for (j, tc) in transition_constraints.iter().enumerate() {
-                    let tc_eval = tc.eval(&eval_point);
-                    println!("  TC {} numeric eval: {}", j, tc_eval.value);
-                    if tc_eval.value != BigInt::from(0) {
-                        println!("  WARNING: TC {} is NOT zero numerically at cycle {}", j, i);
-                    }
-                }
-            }
-            
-            // Check polynomial evaluation
-            for (j, tp) in transition_polynomials.iter().enumerate() {
-                let tp_eval = tp.eval(root.clone());
-                println!("  TP {} evaluates to: {}", j, tp_eval.value);
-                if tp_eval.value != BigInt::from(0) {
-                    println!("  WARNING: TP {} is NOT zero at zeroifier root {}", j, i);
-                }
-            }
-        }
-        
         for (i, tp) in transition_polynomials.iter().enumerate() {
-            println!("DEBUG: Transition polynomial {} degree: {}", i, tp.degree());
-            println!("DEBUG: Transition polynomial {} leading coeff: {}", i, tp.coeffs[0].value);
-            
             let quotient = tp.clone() / tz.clone();
             transition_quotients.push(quotient.clone());
-            
-            println!("DEBUG: Quotient {} degree: {}", i, quotient.degree());
-            if quotient.coeffs.len() > 0 {
-                println!("DEBUG: Quotient {} leading coeff: {}", i, quotient.coeffs[0].value);
-            }
-            
-            // Debug: verify division is correct by checking tp = quotient * tz + remainder
-            let product = quotient.clone() * tz.clone();
-            let remainder = tp.clone() - product.clone();
-            
-            println!("DEBUG: Division verification for TP {}:", i);
-            println!("  Original degree: {}, Product degree: {}", tp.degree(), product.degree());
-            println!("  Remainder degree: {}", remainder.degree());
-            
-            // Check if remainder is small (should be near zero if division is exact)
-            if remainder.degree() >= tz.degree() {
-                println!("DEBUG: Division verification failed for transition polynomial {}", i);
-                println!("  Remainder degree: {}, Zeroifier degree: {}", remainder.degree(), tz.degree());
-            }
-            
-            // Additional check: evaluate at a random point and compare
-            let test_point = FieldElement::new(BigInt::from(42));
-            let tp_eval = tp.eval(test_point.clone());
-            let quotient_eval = quotient.eval(test_point.clone());
-            let tz_eval = tz.eval(test_point.clone());
-            let product_eval = quotient_eval.clone() * tz_eval.clone();
-            
-            println!("DEBUG: At test point 42:");
-            println!("  TP eval: {}", tp_eval.value);
-            println!("  Quotient * Zeroifier eval: {}", product_eval.value);
-            println!("  Difference: {}", (tp_eval.clone() - product_eval.clone()).value);
         }
 
         // create randomizer polynomial
@@ -475,11 +374,6 @@ impl Stark {
             1 + 2*transition_quotients.len() + 2*boundary_quotients.len(),
             fiat_shamir_bytes.clone()
         );
-        println!("DEBUG Prover: Number of weights sampled: {}", weights.len());
-        println!("DEBUG Prover: Num transition quotients: {}", transition_quotients.len());
-        println!("DEBUG Prover: Num boundary quotients: {}", boundary_quotients.len());
-        println!("DEBUG Prover: First 4 bytes of Fiat-Shamir: {:?}", &fiat_shamir_bytes[..4]);
-        println!("DEBUG Prover: First weight: {}", weights[0].value);
 
         // ensure transition quotient degrees match degree bounds
         let tq_degrees: Vec<usize> = transition_quotients.iter().map(|tq| tq.degree()).collect();
@@ -508,91 +402,12 @@ impl Stark {
         for i in 0..terms.len() {
             combination = combination + (Polynomial{coeffs: vec![weights[i].clone()]} * terms[i].clone());
         }
-        println!("DEBUG: Combination polynomial degree: {}", combination.degree());
-        println!("DEBUG: Max degree: {}", max_degree);
         // compute matching codeword
         let combined_codeword = combination.eval_domain(fri_domain.clone());
-        println!("DEBUG: FRI domain length: {}", fri_domain.len());
-        println!("DEBUG: First few FRI domain points: {:?}", 
-                 fri_domain.iter().take(3).map(|x| x.value.to_string()).collect::<Vec<_>>());
-        println!("DEBUG: First few values of combined codeword: {:?}", 
-                 combined_codeword.iter().take(5).map(|x| x.value.to_string()).collect::<Vec<_>>());
 
         // prove low degree of combination polynomial w/ fri, and collect indices
         let mut indices = self.fri.prove(combined_codeword.clone(), &mut proof_stream);
-        println!("DEBUG: FRI returned indices: {:?}", indices);
         indices.sort(); // Sort indices to match verifier's expectation
-        println!("DEBUG: Sorted indices: {:?}", indices);
-        
-        // Debug: Check values at the indices FRI is querying
-        println!("DEBUG Prover: First index from sorted list: {}", indices[0]);
-        let idx = indices[0];
-        println!("DEBUG Prover: combined_codeword[{}] = {}", idx, combined_codeword[idx].value);
-        // Also check the evaluation domain point
-        let domain_point = self.fri.offset.clone() * self.fri.omega.pow(idx as u128);
-        println!("DEBUG Prover: domain point at index {} = {}", idx, domain_point.value);
-        let combination_eval = combination.eval(domain_point.clone());
-        println!("DEBUG Prover: combination.eval(domain_point) = {}", combination_eval.value);
-        
-        // Let's also manually verify this matches the codeword
-        if combination_eval != combined_codeword[idx] {
-            println!("ERROR: Combination eval doesn't match codeword!");
-        }
-        
-        // Debug: Check what the individual transition quotients evaluate to at this point
-        for (tq_idx, tq) in transition_quotients.iter().enumerate() {
-            let tq_eval = tq.eval(domain_point.clone());
-            println!("DEBUG Prover: TQ {} eval at domain point: {}", tq_idx, tq_eval.value);
-            
-            // Also check if the transition polynomial evaluates correctly
-            let tp_eval = transition_polynomials[tq_idx].eval(domain_point.clone());
-            let tz_eval = self.transition_zeroifier().eval(domain_point.clone());
-            let expected_quotient = tp_eval.clone() / tz_eval.clone();
-            println!("DEBUG Prover: Expected TQ {} numeric quotient: {}", tq_idx, expected_quotient.value);
-            
-            if tq_eval != expected_quotient {
-                println!("DEBUG: MISMATCH in TQ {} - polynomial eval: {}, numeric eval: {}", 
-                         tq_idx, tq_eval.value, expected_quotient.value);
-            }
-        }
-        
-        // Debug: Let's also manually evaluate the transition constraints at this numeric point
-        // to see if we get the same values as the verifier
-        let next_point = domain_point.clone() * self.omicron.clone();
-        let current_trace_vals = vec![
-            trace_polynomials[0].eval(domain_point.clone()),
-            trace_polynomials[1].eval(domain_point.clone())
-        ];
-        let next_trace_vals = vec![
-            trace_polynomials[0].eval(next_point.clone()),
-            trace_polynomials[1].eval(next_point.clone())
-        ];
-        
-        let mut numeric_point = vec![domain_point.clone()];
-        numeric_point.extend(current_trace_vals.clone());
-        numeric_point.extend(next_trace_vals.clone());
-        
-        for (tc_idx, tc) in transition_constraints.iter().enumerate() {
-            let tc_numeric_eval = tc.eval(&numeric_point);
-            println!("DEBUG Prover: TC {} numeric eval: {}", tc_idx, tc_numeric_eval.value);
-            
-            let tz_eval = self.transition_zeroifier().eval(domain_point.clone());
-            let numeric_quotient = tc_numeric_eval / tz_eval;
-            println!("DEBUG Prover: TC {} numeric quotient: {}", tc_idx, numeric_quotient.value);
-        }
-        
-        // Debug: Also check what the trace polynomials evaluate to at this point
-        for (tp_idx, tp) in trace_polynomials.iter().enumerate() {
-            let tp_eval = tp.eval(domain_point.clone());
-            println!("DEBUG Prover: Trace poly {} eval at domain point: {}", tp_idx, tp_eval.value);
-        }
-        
-        // And check the "next" values (scaled by omicron)
-        println!("DEBUG Prover: Next point calculated as current * omicron: {}", next_point.value);
-        for (tp_idx, tp) in trace_polynomials.iter().enumerate() {
-            let tp_next_eval = tp.eval(next_point.clone());
-            println!("DEBUG Prover: Trace poly {} eval at NEXT point: {}", tp_idx, tp_next_eval.value);
-        }
 
         println!("after fri proof stream len {}", proof_stream.objects.len());
 
@@ -636,7 +451,6 @@ impl Stark {
             // commit to i'th word in codeword
             let randomizer_value = &randomizer_codeword[i];
             if idx_pos == 0 {
-                println!("DEBUG Prover: Sending randomizer[{}] = {}", i, randomizer_value.value);
             }
             proof_stream.push(serde_json::to_string(randomizer_value).unwrap());
             
@@ -690,25 +504,15 @@ impl Stark {
             1 + 2*transition_constraints.len() + 2*self.boundary_interpolants(boundary.clone()).len(),
             fiat_shamir_bytes.clone()
         );
-        println!("DEBUG Verifier: Number of weights sampled: {}", weights.len());
-        println!("DEBUG Verifier: First 4 bytes of Fiat-Shamir: {:?}", &fiat_shamir_bytes[..4]);
-        println!("DEBUG Verifier: First weight: {}", weights[0].value);
-
         // verify low degree of combination polynomial
         let mut polynomial_values: Vec<(usize, FieldElement)> = vec![];
         let mut verifier_accepts: bool = self.fri.verify( &mut proof_stream, &mut polynomial_values);
         polynomial_values.sort_by_key(|iv| iv.0); // sort
-        println!("DEBUG Verifier: FRI returned {} polynomial values", polynomial_values.len());
-        if polynomial_values.len() > 0 {
-            println!("DEBUG Verifier: First polynomial value: ({}, {})", 
-                     polynomial_values[0].0, polynomial_values[0].1.value);
-        }
 
 
         println!("read idx after fri {}", proof_stream.read_idx);
 
         if verifier_accepts == false { 
-            println!("DEBUG: FRI verification failed");
             return false; 
         }
         
@@ -716,7 +520,6 @@ impl Stark {
         let indices: Vec<usize> = polynomial_values.iter().map(|iv| iv.0).collect();
         let values: Vec<FieldElement> = polynomial_values.iter().map(|iv| iv.1.clone()).collect();
         
-        println!("DEBUG Verifier: FRI returned indices: {:?}", indices);
 
 
         // read and verify leafs which are elements of boundary quotient codewords
@@ -787,7 +590,6 @@ impl Stark {
             let current_index = indices[i];
             
             if i == 0 {
-                println!("DEBUG Verifier: Processing index {} which is indices[{}]", current_index, i);
             }
 
             // get trace values by applying a correction ot the boundary quotient values (which are the leafs)
