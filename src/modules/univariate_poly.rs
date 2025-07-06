@@ -54,7 +54,7 @@ impl Polynomial {
     }
     
     // Fast domain evaluation using NTT
-    fn eval_domain_ntt(&self, domain_size: usize) -> Vec<FieldElement> {
+    pub fn eval_domain_ntt(&self, domain_size: usize) -> Vec<FieldElement> {
         let ntt = NTT::new(domain_size);
         
         // Our coefficients are highest to lowest, but NTT expects lowest to highest

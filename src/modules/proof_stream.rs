@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use bincode;
 use std::vec;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ProofStream {
     pub objects: Vec<String>,
     pub read_idx: usize,
