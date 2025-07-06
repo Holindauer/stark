@@ -1,6 +1,6 @@
-# STARK Proof System (w/ FRI)
+# Scalable Transparent Arguments of Knowledge
 
-A complete Rust implementation of STARKs (Scalable Transparent ARguments of Knowledge) with Fast Reed-Solomon Interactive Oracle Proofs (FRI). Based on [Alan Szepieniec's excellent STARK Anatomy tutorial](https://aszepieniec.github.io/stark-anatomy/).
+Rust implementation of STARKs (Scalable Transparent ARguments of Knowledge) with Fast Reed-Solomon Interactive Oracle Proofs (FRI). Based on [Alan Szepieniec's excellent STARK Anatomy tutorial](https://aszepieniec.github.io/stark-anatomy/).
 
 ## Overview
 
@@ -19,18 +19,6 @@ cargo bench
 cargo bench stark_benchmarks
 cargo bench polynomial_benchmarks
 ```
-
-## Performance
-
-- **STARK Prove**: ~12 seconds (small configuration)
-- **STARK Verify**: ~200-500ms
-- **Field Operations**: ~460-490 nanoseconds
-- **NTT Evaluation**: O(n log n) for power-of-2 domains
-
-See the [benchmarks README](benches/README.md) for detailed performance analysis.
-
-## Architecture
-
 ### Core Components
 
 1. **Field Module** (`field.rs`)
@@ -57,13 +45,6 @@ See the [benchmarks README](benches/README.md) for detailed performance analysis
    - Complete STARK prover and verifier
    - Rescue-Prime hash function as example computation
    - Fiat-Shamir transform for non-interactivity
-
-### Key Features
-
-- **Scalability**: Supports various security parameters and domain sizes
-- **Transparency**: No trusted setup required
-- **Post-Quantum Security**: Based on hash functions and information theory
-- **Optimized Operations**: NTT for fast polynomial operations on power-of-2 domains
 
 ## Testing
 
@@ -121,20 +102,6 @@ cargo tarpaulin -o html
 - [STARK Anatomy Tutorial](https://aszepieniec.github.io/stark-anatomy/) - Original tutorial this implementation is based on
 - [STARK Paper](https://eprint.iacr.org/2018/046.pdf) - Original STARK paper by Ben-Sasson et al.
 - [FRI Paper](https://eccc.weizmann.ac.il/report/2017/134/) - Fast Reed-Solomon IOP paper
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit pull requests or open issues.
-
-### Areas for Contribution
-- Further optimizations (GPU acceleration, parallelization)
-- Additional hash function implementations
-- More comprehensive examples
-- Documentation improvements
-
-## License
-
-This project is open source under the MIT license.
 
 ## Acknowledgments
 
