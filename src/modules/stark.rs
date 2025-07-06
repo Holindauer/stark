@@ -361,13 +361,16 @@ impl Stark {
               - 2 for every transition quotient
               - 3 for every boundary quotient
          */
+        let fiat_shamir_bytes = proof_stream.prover_fiat_shamir(32);
         let weights = self.sample_weights(
             1 + 2*transition_quotients.len() + 2*boundary_quotients.len(),
-            proof_stream.prover_fiat_shamir(32)
+            fiat_shamir_bytes.clone()
         );
         println!("DEBUG Prover: Number of weights sampled: {}", weights.len());
         println!("DEBUG Prover: Num transition quotients: {}", transition_quotients.len());
         println!("DEBUG Prover: Num boundary quotients: {}", boundary_quotients.len());
+        println!("DEBUG Prover: First 4 bytes of Fiat-Shamir: {:?}", &fiat_shamir_bytes[..4]);
+        println!("DEBUG Prover: First weight: {}", weights[0].value);
 
         // ensure transition quotient degrees match degree bounds
         let tq_degrees: Vec<usize> = transition_quotients.iter().map(|tq| tq.degree()).collect();
@@ -413,8 +416,12 @@ impl Stark {
         println!("DEBUG: Sorted indices: {:?}", indices);
         
         // Debug: Check values at the indices FRI is querying
-        for idx in indices.iter().take(2) {
-            println!("DEBUG: combined_codeword[{}] = {}", idx, combined_codeword[*idx].value);
+        for (i, idx) in indices.iter().enumerate().take(2) {
+            println!("DEBUG Prover: combined_codeword[{}] = {}", idx, combined_codeword[*idx].value);
+            // Also check the evaluation domain point
+            let domain_point = self.fri.offset.clone() * self.fri.omega.pow(*idx as u128);
+            println!("DEBUG Prover: domain point at index {} = {}", idx, domain_point.value);
+            println!("DEBUG Prover: combination.eval(domain_point) = {}", combination.eval(domain_point));
         }
 
         println!("after fri proof stream len {}", proof_stream.objects.len());
@@ -454,10 +461,14 @@ impl Stark {
 
 
         // ... as well as in the randomizer
-        for i in indices.clone() {
+        for (idx_pos, i) in indices.clone().into_iter().enumerate() {
 
             // commit to i'th word in codeword
-            proof_stream.push(serde_json::to_string(&randomizer_codeword[i]).unwrap());
+            let randomizer_value = &randomizer_codeword[i];
+            if idx_pos == 0 {
+                println!("DEBUG Prover: Sending randomizer[{}] = {}", i, randomizer_value.value);
+            }
+            proof_stream.push(serde_json::to_string(randomizer_value).unwrap());
             
             // get authentication path for i'th word in codeword
             let serialized_rc: Vec<Vec<u8>> = randomizer_codeword.iter() 
@@ -504,11 +515,14 @@ impl Stark {
         println!("read idx after randomizer root {}", proof_stream.read_idx);
 
         // get weights for nonlinear combination
+        let fiat_shamir_bytes = proof_stream.verifier_fiat_shamir(32);
         let weights = self.sample_weights(
             1 + 2*transition_constraints.len() + 2*self.boundary_interpolants(boundary.clone()).len(),
-            proof_stream.verifier_fiat_shamir(32)
+            fiat_shamir_bytes.clone()
         );
         println!("DEBUG Verifier: Number of weights sampled: {}", weights.len());
+        println!("DEBUG Verifier: First 4 bytes of Fiat-Shamir: {:?}", &fiat_shamir_bytes[..4]);
+        println!("DEBUG Verifier: First weight: {}", weights[0].value);
 
         // verify low degree of combination polynomial
         let mut polynomial_values: Vec<(usize, FieldElement)> = vec![];
@@ -531,6 +545,8 @@ impl Stark {
         // isolate indices and values
         let indices: Vec<usize> = polynomial_values.iter().map(|iv| iv.0).collect();
         let values: Vec<FieldElement> = polynomial_values.iter().map(|iv| iv.1.clone()).collect();
+        
+        println!("DEBUG Verifier: FRI returned indices: {:?}", indices);
 
 
         // read and verify leafs which are elements of boundary quotient codewords
@@ -606,10 +622,11 @@ impl Stark {
             let domain_next_index = self.generator.clone() * (self.omega.pow(next_index as u128));
             
             if i == 0 {
-                println!("DEBUG: Evaluating combination at index {} (domain point {})", 
+                println!("DEBUG Verifier: Evaluating combination at index {} (domain point {})", 
                          current_index, domain_current_index.value);
-                println!("DEBUG: Generator: {}, Omega: {}", self.generator.value, self.omega.value);
-                println!("DEBUG: Expected FRI value at this index: {}", values[i].value);
+                println!("DEBUG Verifier: Generator: {}, Omega: {}", self.generator.value, self.omega.value);
+                println!("DEBUG Verifier: FRI offset: {}, FRI omega: {}", self.fri.offset.value, self.fri.omega.value);
+                println!("DEBUG Verifier: Expected FRI value at this index: {}", values[i].value);
             }
 
             // current trace
@@ -626,15 +643,17 @@ impl Stark {
                 let interpolant = self.boundary_interpolants(boundary.clone())[s].clone();
                 
                 
-                current_trace[s] = leafs[s].get(&current_index).unwrap().clone() * zeroifier.eval(domain_current_index.clone()) + interpolant.eval(domain_current_index.clone());
-                next_trace[s] = leafs[s].get(&next_index).unwrap().clone() * zeroifier.eval(domain_next_index.clone()) + interpolant.eval(domain_next_index.clone());
+                let current_trace_value = leafs[s].get(&current_index).unwrap().clone() * zeroifier.eval(domain_current_index.clone()) + interpolant.eval(domain_current_index.clone());
+                let next_trace_value = leafs[s].get(&next_index).unwrap().clone() * zeroifier.eval(domain_next_index.clone()) + interpolant.eval(domain_next_index.clone());
+                current_trace[s] = current_trace_value;
+                next_trace[s] = next_trace_value;
             }
             
             // get eval point
             let mut point: Vec<FieldElement> = vec![];
             point.push(domain_current_index.clone());
-            point.extend(current_trace);
-            point.extend(next_trace);
+            point.extend(current_trace.clone());
+            point.extend(next_trace.clone());
 
             // eval transition constraints
             let mut transition_constraints_values: Vec<FieldElement> = vec![];
@@ -650,7 +669,7 @@ impl Stark {
             let randomizer_term = randomizer.get(&current_index).unwrap().clone();
             terms.push(randomizer_term.clone());
             if i == 0 {
-                println!("  Term 0 (randomizer): {}", randomizer_term.value);
+                println!("DEBUG Verifier: Term 0 (randomizer): {}", randomizer_term.value);
             }
             
             for s in 0..transition_constraints_values.len(){
@@ -677,8 +696,15 @@ impl Stark {
                 let shifted_term = bqv.clone() * (domain_current_index.pow(shift as u128));
                 terms.push(shifted_term.clone());
                 if i == 0 {
-                    println!("  Term {} (bq {}): {}", 5 + s*2, s, bqv.value);
+                    println!("  Term {} (bq {} from Merkle): {}", 5 + s*2, s, bqv.value);
                     println!("  Term {} (bq {} shifted by {}): {}", 6 + s*2, s, shift, shifted_term.value);
+                    
+                    // Debug: What should this boundary quotient value be?
+                    let trace_value = current_trace[s].clone();
+                    let interpolant = self.boundary_interpolants(boundary.clone())[s].eval(domain_current_index.clone());
+                    let zeroifier = self.boundary_zeroifiers(boundary.clone())[s].eval(domain_current_index.clone());
+                    let expected_bq = (trace_value - interpolant) / zeroifier;
+                    println!("  DEBUG: Reconstructed bq {}: {}", s, expected_bq.value);
                 }
             }
             
@@ -689,6 +715,10 @@ impl Stark {
             }
             
             // verify against combination polynomail value
+            if i == 0 {
+                println!("DEBUG Verifier: Computed combination: {}", combination.value);
+                println!("DEBUG Verifier: Expected (from FRI): {}", values[i].value);
+            }
             verifier_accepts = verifier_accepts && (combination == values[i]);
             if !verifier_accepts {
                 println!("Verification failed at index {}: combination {} != values[i] {}", i, combination.value, values[i].value);
