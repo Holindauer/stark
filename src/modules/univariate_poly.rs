@@ -345,46 +345,44 @@ impl Div for Polynomial {
         // Ensure denominator is not the zero polynomial
         if rhs.is_zero() { panic!("Attempted to divide by zero polynomial."); }
 
-        // Initialize the numerator and denominator  
-        let mut num = self.coeffs;
-        let mut denom = rhs.coeffs;
+        // Get the actual degrees of the polynomials
+        let num_degree = self.degree();
+        let denom_degree = rhs.degree();
+        
+        // If denominator degree is higher, quotient is zero
+        if denom_degree > num_degree {
+            return Polynomial::new(vec![BigInt::from(0)]);
+        }
 
-        // Reverse for easier handling of indices (from highest to lowest degree)
-        num.reverse(); denom.reverse();
+        // Work with copies of the polynomial coefficients
+        let mut dividend = self.coeffs.clone();
+        let divisor = rhs.coeffs.clone();
 
-        // Initialize the quotient with the correct degree
-        let num_degree = num.len() - 1;
-        let denom_degree = denom.len() - 1;
-        let mut quotient = vec![FieldElement::zero(); num_degree - denom_degree + 1];
+        // Calculate quotient degree and initialize quotient
+        let quotient_degree = num_degree - denom_degree;
+        let mut quotient = vec![FieldElement::zero(); quotient_degree + 1];
 
-        // perform polynomial long division
-        for i in 0..=num_degree - denom_degree {
-            if num[i] != FieldElement::zero() {
-                // Calculate the coefficient for the current term of the quotient
-                let coeff = num[i].clone() / denom[0].clone();
+        // Perform polynomial long division
+        // We work from highest degree to lowest degree
+        for i in 0..=quotient_degree {
+            // Current position in dividend (highest degree term)
+            let dividend_pos = i;
+            
+            if dividend_pos < dividend.len() && dividend[dividend_pos] != FieldElement::zero() {
+                // Calculate coefficient: leading coefficient of dividend / leading coefficient of divisor
+                let coeff = dividend[dividend_pos].clone() / divisor[0].clone();
                 quotient[i] = coeff.clone();
 
-                // Subtract the appropriate multiple of the denominator from the numerator
-                for (j, denom_coeff) in denom.iter().enumerate() {
-                    if i + j <= num_degree {
-                        num[i + j] = num[i+j].clone() - coeff.clone() * denom_coeff.clone();
+                // Subtract coeff * divisor from dividend
+                for j in 0..divisor.len() {
+                    if dividend_pos + j < dividend.len() {
+                        dividend[dividend_pos + j] = dividend[dividend_pos + j].clone() - coeff.clone() * divisor[j].clone();
                     }
                 }
             }
         }
 
-        // Remove leading zeros from the quotient and reverse back to normal order
-        while let Some(last) = quotient.last() {
-            if last.clone() == FieldElement::zero() {
-                quotient.pop();
-            } else {
-                break;
-            }
-        }
-
-        quotient.reverse();
-
-        // Return the resulting polynomial
+        // Return the quotient polynomial
         Polynomial { coeffs: quotient }
     }
 }
@@ -629,6 +627,46 @@ mod tests {
         assert_eq!(out_1.value, y[0].value);
         assert_eq!(out_2.value, y[1].value);
         assert_eq!(out_3.value, y[2].value);   
+    }
+
+    #[test]
+    fn test_polynomial_division_consistency() {
+        // Test that polynomial division gives the same result as numeric division
+        // Create a simple polynomial division case
+        let numerator = Polynomial::new(vec![BigInt::from(3), BigInt::from(2), BigInt::from(1)]); // 3x^2 + 2x + 1
+        let denominator = Polynomial::new(vec![BigInt::from(1), BigInt::from(1)]); // x + 1
+        
+        let quotient_poly = numerator.clone() / denominator.clone();
+        
+        // Test at a specific point
+        let test_point = FieldElement::new(BigInt::from(5));
+        
+        let num_eval = numerator.eval(test_point.clone());
+        let denom_eval = denominator.eval(test_point.clone());
+        let numeric_quotient = num_eval.clone() / denom_eval.clone();
+        
+        let poly_quotient_eval = quotient_poly.eval(test_point);
+        
+        println!("Numerator at x=5: {}", num_eval.value);
+        println!("Denominator at x=5: {}", denom_eval.value);
+        println!("Numeric quotient: {}", numeric_quotient.value);
+        println!("Polynomial quotient at x=5: {}", poly_quotient_eval.value);
+        
+        // Let's also check what 6^(-1) is in the field
+        let six = FieldElement::new(BigInt::from(6));
+        let six_inv = six.inverse();
+        println!("6^(-1) mod p = {}", six_inv.value);
+        
+        // And check 86 * 6^(-1)
+        let eighty_six = FieldElement::new(BigInt::from(86));
+        let manual_result = eighty_six * six_inv;
+        println!("86 * 6^(-1) = {}", manual_result.value);
+        
+        // But for polynomial division, we expect something different
+        // Let's manually verify the polynomial division
+        println!("Quotient polynomial coefficients: {:?}", quotient_poly.coeffs.iter().map(|c| c.value.to_string()).collect::<Vec<_>>());
+        
+        assert_eq!(numeric_quotient, poly_quotient_eval, "Polynomial division inconsistent with numeric division");
     }
 
     #[test]
