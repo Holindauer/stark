@@ -307,7 +307,10 @@ impl Stark {
 
         // setup point for symbolic evaluation
         let mut point: Vec<Polynomial> = vec![];
-        point.push(Polynomial::new(vec![BigInt::from(0), BigInt::from(1)]));
+        // The polynomial X has coefficients [0, 1] following Python reference (lowest to highest)
+        // But our Rust implementation uses highest to lowest, so we need [1, 0]
+        // This represents 1*x + 0 = x
+        point.push(Polynomial::new(vec![BigInt::from(1), BigInt::from(0)]));
 
 
         point.extend(trace_polynomials.clone());
@@ -362,15 +365,18 @@ impl Stark {
             1 + 2*transition_quotients.len() + 2*boundary_quotients.len(),
             proof_stream.prover_fiat_shamir(32)
         );
-        println!("Prover: num weights = {}, num transition quotients = {}, num boundary quotients = {}, max_degree = {}", 
-                 weights.len(), transition_quotients.len(), boundary_quotients.len(), self.max_degree(transition_constraints.clone()));
+        println!("DEBUG Prover: Number of weights sampled: {}", weights.len());
+        println!("DEBUG Prover: Num transition quotients: {}", transition_quotients.len());
+        println!("DEBUG Prover: Num boundary quotients: {}", boundary_quotients.len());
 
         // ensure transition quotient degrees match degree bounds
         let tq_degrees: Vec<usize> = transition_quotients.iter().map(|tq| tq.degree()).collect();
         assert!(tq_degrees == self.transition_quotient_degree_bounds(transition_constraints.clone()));
     
         // compute terms of nonlinear combination polynomial
-        let x = Polynomial{coeffs: vec![FieldElement::zero(), FieldElement::one()]};
+        // The polynomial x has coefficients [1, 0] (highest to lowest in our Rust impl)
+        // This represents 1*x + 0 = x
+        let x = Polynomial{coeffs: vec![FieldElement::one(), FieldElement::zero()]};
         let max_degree = self.max_degree(transition_constraints.clone()); 
         let mut terms: Vec<Polynomial> = vec![];
         terms.push(randomizer_poly);
@@ -390,6 +396,8 @@ impl Stark {
         for i in 0..terms.len() {
             combination = combination + (Polynomial{coeffs: vec![weights[i].clone()]} * terms[i].clone());
         }
+        println!("DEBUG: Combination polynomial degree: {}", combination.degree());
+        println!("DEBUG: Max degree: {}", max_degree);
         // compute matching codeword
         let combined_codeword = combination.eval_domain(fri_domain.clone());
 
@@ -401,7 +409,7 @@ impl Stark {
 
         // process indices
         let mut duplicated_indices: Vec<usize> = indices.clone();
-        for i in indices{
+        for i in indices.clone() {
             duplicated_indices.push( (i + self.expansion_factor) % self.fri.domain_length );
         }
         duplicated_indices.sort(); // Sort to match verifier's expectation
@@ -415,7 +423,7 @@ impl Stark {
 
         // open indicated positions in the boudnary quotient codeword
         for bqc in boundary_quotient_codewords {
-            for i in quadrupled_indices.clone() {
+            for i in duplicated_indices.clone() {
 
                 // commit to element of codeword at index
                 proof_stream.push(serde_json::to_string(&bqc[i]).unwrap());
@@ -434,7 +442,7 @@ impl Stark {
 
 
         // ... as well as in the randomizer
-        for i in quadrupled_indices.clone() {
+        for i in indices.clone() {
 
             // commit to i'th word in codeword
             proof_stream.push(serde_json::to_string(&randomizer_codeword[i]).unwrap());
@@ -488,8 +496,7 @@ impl Stark {
             1 + 2*transition_constraints.len() + 2*self.boundary_interpolants(boundary.clone()).len(),
             proof_stream.verifier_fiat_shamir(32)
         );
-        println!("Verifier: num weights = {}, num transition constraints = {}, num boundary interpolants = {}", 
-                 weights.len(), transition_constraints.len(), self.boundary_interpolants(boundary.clone()).len());
+        println!("DEBUG Verifier: Number of weights sampled: {}", weights.len());
 
         // verify low degree of combination polynomial
         let mut polynomial_values: Vec<(usize, FieldElement)> = vec![];
@@ -500,7 +507,7 @@ impl Stark {
         println!("read idx after fri {}", proof_stream.read_idx);
 
         if verifier_accepts == false { 
-            println!("combination polynomial is not of low degree");
+            println!("DEBUG: FRI verification failed");
             return false; 
         }
         
@@ -547,7 +554,7 @@ impl Stark {
 
         // read and verify randomizer leafs
         let mut randomizer: HashMap<usize, FieldElement> = HashMap::new();
-        for i in duplicated_indices {
+        for i in indices.clone() {
 
             // get leaf value and insert into map
             let leaf_value: FieldElement = serde_json::from_str(&proof_stream.pull()).unwrap();
@@ -616,41 +623,61 @@ impl Stark {
 
             let counter = 0;
             let mut terms: Vec<FieldElement> = vec![];
-            terms.push(randomizer.get(&current_index).unwrap().clone());
+            let randomizer_term = randomizer.get(&current_index).unwrap().clone();
+            terms.push(randomizer_term.clone());
+            if i == 0 {
+                println!("  Term 0 (randomizer): {}", randomizer_term.value);
+            }
+            
             for s in 0..transition_constraints_values.len(){
                 let tcv = transition_constraints_values[s].clone();
                 let quotient = tcv / self.transition_zeroifier().eval(domain_current_index.clone());
                 terms.push(quotient.clone());
                 let shift = self.max_degree(transition_constraints.clone()) - self.transition_quotient_degree_bounds(transition_constraints.clone())[s];
-                terms.push(quotient * (domain_current_index.pow(shift as u128)))
+                let shifted_term = quotient.clone() * (domain_current_index.pow(shift as u128));
+                terms.push(shifted_term.clone());
+                if i == 0 {
+                    println!("  Term {} (tq {}): {}", 1 + s*2, s, quotient.value);
+                    println!("  Term {} (tq {} shifted by {}): {}", 2 + s*2, s, shift, shifted_term.value);
+                }
             }
             for s in 0..self.num_registers {
                 let bqv = leafs[s].get(&current_index).unwrap().clone();
                 terms.push(bqv.clone());
                 let shift = self.max_degree(transition_constraints.clone()) - self.boundary_quotient_degree_bounds(randomized_trace_length, boundary.clone())[s];
-                terms.push(bqv * (domain_current_index.pow(shift as u128)));
+                let shifted_term = bqv.clone() * (domain_current_index.pow(shift as u128));
+                terms.push(shifted_term.clone());
+                if i == 0 {
+                    println!("  Term {} (bq {}): {}", 5 + s*2, s, bqv.value);
+                    println!("  Term {} (bq {} shifted by {}): {}", 6 + s*2, s, shift, shifted_term.value);
+                }
             }
             
             // construct combination
             let mut combination: FieldElement = FieldElement::zero();
             for j in 0..terms.len() {
-                combination = combination + (terms[j].clone() * weights[j].clone())
+                let weighted_term = terms[j].clone() * weights[j].clone();
+                combination = combination + weighted_term.clone();
+                if i == 0 {
+                    println!("  Weight {}: {}", j, weights[j].value);
+                    println!("  Weighted term {}: {}", j, weighted_term.value);
+                }
             }
             
             // verify against combination polynomail value
             verifier_accepts = verifier_accepts && (combination == values[i]);
             if !verifier_accepts {
                 println!("Verification failed at index {}: combination {} != values[i] {}", i, combination.value, values[i].value);
-                println!("  current_index: {}, domain_current_index: {}", current_index, domain_current_index.value);
-                println!("  terms.len(): {}, weights.len(): {}", terms.len(), weights.len());
-                for j in 0..3.min(terms.len()) {
-                    println!("  term[{}] = {}, weight[{}] = {}", j, terms[j].value, j, weights[j].value);
-                }
+                println!("  Current index: {}", current_index);
+                println!("  Domain current index: {}", domain_current_index.value);
+                println!("  Number of terms: {}", terms.len());
+                println!("  Weights length: {}", weights.len());
                 return false;
             }
 
         }
 
+        println!("DEBUG: Final verifier_accepts = {}", verifier_accepts);
         verifier_accepts
     }
 }

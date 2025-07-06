@@ -241,8 +241,16 @@ impl Fri {
             );
         }
 
-        // return top level indices
-        top_level_indices
+        // return the indices from the first round of queries
+        // We need to reconstruct them from the top level since indices were folded
+        let mut a_indices: Vec<usize> = Vec::new();
+        let mut b_indices: Vec<usize> = Vec::new();
+        for idx in top_level_indices {
+            a_indices.push(idx);
+            b_indices.push(idx + codewords.get(0).unwrap().len()/2);
+        }
+        a_indices.extend(b_indices);
+        a_indices
     }
 
     pub fn verify(&self, proof_stream: &mut ProofStream, polynomial_values: &mut Vec<(usize, FieldElement)>) -> bool {
