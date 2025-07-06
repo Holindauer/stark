@@ -299,7 +299,7 @@ impl Stark {
 
         // setup point for symbolic evaluation
         let mut point: Vec<Polynomial> = vec![];
-        point.push(Polynomial::new(vec![BigInt::from(1), BigInt::from(0)]));
+        point.push(Polynomial::new(vec![BigInt::from(0), BigInt::from(1)]));
 
 
         point.extend(trace_polynomials.clone());
@@ -354,13 +354,15 @@ impl Stark {
             1 + 2*transition_quotients.len() + 2*boundary_quotients.len(),
             proof_stream.prover_fiat_shamir(32)
         );
+        println!("Prover: num weights = {}, num transition quotients = {}, num boundary quotients = {}", 
+                 weights.len(), transition_quotients.len(), boundary_quotients.len());
 
         // ensure transition quotient degrees match degree bounds
         let tq_degrees: Vec<usize> = transition_quotients.iter().map(|tq| tq.degree()).collect();
         assert!(tq_degrees == self.transition_quotient_degree_bounds(transition_constraints.clone()));
     
         // compute terms of nonlinear combination polynomial
-        let x = Polynomial{coeffs: vec![FieldElement::one(), FieldElement::zero()]};
+        let x = Polynomial{coeffs: vec![FieldElement::zero(), FieldElement::one()]};
         let max_degree = self.max_degree(transition_constraints.clone()); 
         let mut terms: Vec<Polynomial> = vec![];
         terms.push(randomizer_poly);
@@ -475,6 +477,8 @@ impl Stark {
             1 + 2*transition_constraints.len() + 2*self.boundary_interpolants(boundary.clone()).len(),
             proof_stream.verifier_fiat_shamir(32)
         );
+        println!("Verifier: num weights = {}, num transition constraints = {}, num boundary interpolants = {}", 
+                 weights.len(), transition_constraints.len(), self.boundary_interpolants(boundary.clone()).len());
 
         // verify low degree of combination polynomial
         let mut polynomial_values: Vec<(usize, FieldElement)> = vec![];
@@ -625,6 +629,7 @@ impl Stark {
             // verify against combination polynomail value
             verifier_accepts = verifier_accepts && (combination == values[i]);
             if !verifier_accepts {
+                println!("Verification failed at index {}: combination {} != values[i] {}", i, combination.value, values[i].value);
                 return false;
             }
 
