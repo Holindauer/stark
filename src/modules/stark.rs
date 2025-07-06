@@ -190,7 +190,15 @@ impl Stark {
     // max degree
     fn max_degree(&self, transition_constraints: Vec<MPolynomial>) -> usize {
        let md: usize = *self.transition_quotient_degree_bounds(transition_constraints).iter().max().unwrap(); 
-        (1 << ((std::mem::size_of_val(&md) * 8) - md.leading_zeros() as usize))- 1
+        // Calculate the next power of 2 minus 1
+        // This is equivalent to Python's (1 << (len(bin(md)[2:]))) - 1
+        if md == 0 {
+            0
+        } else {
+            // Number of bits needed to represent md
+            let bits_needed = 64 - md.leading_zeros() as usize;
+            (1 << bits_needed) - 1
+        }
     }
 
     // smaple weights 
@@ -354,8 +362,8 @@ impl Stark {
             1 + 2*transition_quotients.len() + 2*boundary_quotients.len(),
             proof_stream.prover_fiat_shamir(32)
         );
-        println!("Prover: num weights = {}, num transition quotients = {}, num boundary quotients = {}", 
-                 weights.len(), transition_quotients.len(), boundary_quotients.len());
+        println!("Prover: num weights = {}, num transition quotients = {}, num boundary quotients = {}, max_degree = {}", 
+                 weights.len(), transition_quotients.len(), boundary_quotients.len(), self.max_degree(transition_constraints.clone()));
 
         // ensure transition quotient degrees match degree bounds
         let tq_degrees: Vec<usize> = transition_quotients.iter().map(|tq| tq.degree()).collect();
@@ -386,7 +394,8 @@ impl Stark {
         let combined_codeword = combination.eval_domain(fri_domain.clone());
 
         // prove low degree of combination polynomial w/ fri, and collect indices
-        let indices = self.fri.prove(combined_codeword, &mut proof_stream);
+        let mut indices = self.fri.prove(combined_codeword.clone(), &mut proof_stream);
+        indices.sort(); // Sort indices to match verifier's expectation
 
         println!("after fri proof stream len {}", proof_stream.objects.len());
 
@@ -395,8 +404,10 @@ impl Stark {
         for i in indices{
             duplicated_indices.push( (i + self.expansion_factor) % self.fri.domain_length );
         }
+        duplicated_indices.sort(); // Sort to match verifier's expectation
+        
         let mut quadrupled_indices: Vec<usize> = duplicated_indices.clone();
-        for i in duplicated_indices {
+        for i in duplicated_indices.clone() {
             quadrupled_indices.push( (i + (self.fri.domain_length / 2)) % self.fri.domain_length )
         }
         quadrupled_indices.sort();
@@ -630,6 +641,11 @@ impl Stark {
             verifier_accepts = verifier_accepts && (combination == values[i]);
             if !verifier_accepts {
                 println!("Verification failed at index {}: combination {} != values[i] {}", i, combination.value, values[i].value);
+                println!("  current_index: {}, domain_current_index: {}", current_index, domain_current_index.value);
+                println!("  terms.len(): {}, weights.len(): {}", terms.len(), weights.len());
+                for j in 0..3.min(terms.len()) {
+                    println!("  term[{}] = {}, weight[{}] = {}", j, terms[j].value, j, weights[j].value);
+                }
                 return false;
             }
 
