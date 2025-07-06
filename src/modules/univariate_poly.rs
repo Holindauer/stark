@@ -632,6 +632,24 @@ mod tests {
     }
 
     #[test]
+    fn test_constant_polynomial() {
+        // Test creating a constant polynomial
+        let five = FieldElement::new(BigInt::from(5));
+        let const_poly = Polynomial{coeffs: vec![five.clone()]};
+        
+        // Evaluate at different points - should always return 5
+        let x1 = FieldElement::new(BigInt::from(0));
+        let x2 = FieldElement::new(BigInt::from(10));
+        let x3 = FieldElement::new(BigInt::from(100));
+        
+        assert_eq!(const_poly.eval(x1), five);
+        assert_eq!(const_poly.eval(x2), five);
+        assert_eq!(const_poly.eval(x3), five);
+        
+        println!("Constant polynomial test passed");
+    }
+
+    #[test]
     fn test_polynomial_coefficient_order() {
         // Test 1: Create polynomial x (coefficients [1, 0] if highest to lowest)
         let poly_x = Polynomial::new(vec![BigInt::from(1), BigInt::from(0)]);

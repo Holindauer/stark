@@ -400,10 +400,22 @@ impl Stark {
         println!("DEBUG: Max degree: {}", max_degree);
         // compute matching codeword
         let combined_codeword = combination.eval_domain(fri_domain.clone());
+        println!("DEBUG: FRI domain length: {}", fri_domain.len());
+        println!("DEBUG: First few FRI domain points: {:?}", 
+                 fri_domain.iter().take(3).map(|x| x.value.to_string()).collect::<Vec<_>>());
+        println!("DEBUG: First few values of combined codeword: {:?}", 
+                 combined_codeword.iter().take(5).map(|x| x.value.to_string()).collect::<Vec<_>>());
 
         // prove low degree of combination polynomial w/ fri, and collect indices
         let mut indices = self.fri.prove(combined_codeword.clone(), &mut proof_stream);
+        println!("DEBUG: FRI returned indices: {:?}", indices);
         indices.sort(); // Sort indices to match verifier's expectation
+        println!("DEBUG: Sorted indices: {:?}", indices);
+        
+        // Debug: Check values at the indices FRI is querying
+        for idx in indices.iter().take(2) {
+            println!("DEBUG: combined_codeword[{}] = {}", idx, combined_codeword[*idx].value);
+        }
 
         println!("after fri proof stream len {}", proof_stream.objects.len());
 
@@ -502,6 +514,11 @@ impl Stark {
         let mut polynomial_values: Vec<(usize, FieldElement)> = vec![];
         let mut verifier_accepts: bool = self.fri.verify( &mut proof_stream, &mut polynomial_values);
         polynomial_values.sort_by_key(|iv| iv.0); // sort
+        println!("DEBUG Verifier: FRI returned {} polynomial values", polynomial_values.len());
+        if polynomial_values.len() > 0 {
+            println!("DEBUG Verifier: First polynomial value: ({}, {})", 
+                     polynomial_values[0].0, polynomial_values[0].1.value);
+        }
 
 
         println!("read idx after fri {}", proof_stream.read_idx);
@@ -587,6 +604,13 @@ impl Stark {
             let domain_current_index = self.generator.clone() * (self.omega.pow(current_index as u128));
             let next_index = (current_index + self.expansion_factor) % self.fri.domain_length;
             let domain_next_index = self.generator.clone() * (self.omega.pow(next_index as u128));
+            
+            if i == 0 {
+                println!("DEBUG: Evaluating combination at index {} (domain point {})", 
+                         current_index, domain_current_index.value);
+                println!("DEBUG: Generator: {}, Omega: {}", self.generator.value, self.omega.value);
+                println!("DEBUG: Expected FRI value at this index: {}", values[i].value);
+            }
 
             // current trace
             let mut current_trace: Vec<FieldElement> = vec![];
@@ -631,7 +655,12 @@ impl Stark {
             
             for s in 0..transition_constraints_values.len(){
                 let tcv = transition_constraints_values[s].clone();
-                let quotient = tcv / self.transition_zeroifier().eval(domain_current_index.clone());
+                let tz_eval = self.transition_zeroifier().eval(domain_current_index.clone());
+                if i == 0 && s == 0 {
+                    println!("  Transition constraint value {}: {}", s, tcv.value);
+                    println!("  Transition zeroifier eval: {}", tz_eval.value);
+                }
+                let quotient = tcv / tz_eval;
                 terms.push(quotient.clone());
                 let shift = self.max_degree(transition_constraints.clone()) - self.transition_quotient_degree_bounds(transition_constraints.clone())[s];
                 let shifted_term = quotient.clone() * (domain_current_index.pow(shift as u128));
@@ -656,12 +685,7 @@ impl Stark {
             // construct combination
             let mut combination: FieldElement = FieldElement::zero();
             for j in 0..terms.len() {
-                let weighted_term = terms[j].clone() * weights[j].clone();
-                combination = combination + weighted_term.clone();
-                if i == 0 {
-                    println!("  Weight {}: {}", j, weights[j].value);
-                    println!("  Weighted term {}: {}", j, weighted_term.value);
-                }
+                combination = combination + (terms[j].clone() * weights[j].clone())
             }
             
             // verify against combination polynomail value

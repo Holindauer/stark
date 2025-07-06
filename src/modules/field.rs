@@ -16,7 +16,13 @@ pub struct FieldElement {
 impl FieldElement {
     // constructor for field element with value within prime modulus
     pub fn new(value: BigInt) -> FieldElement {
-        FieldElement { value: value % FieldElement::modulus() }
+        let modulus = FieldElement::modulus();
+        let mut reduced = value % &modulus;
+        // Ensure non-negative representation
+        if reduced < BigInt::zero() {
+            reduced += &modulus;
+        }
+        FieldElement { value: reduced }
     }
 
     // generator constructor
@@ -120,10 +126,8 @@ impl Sub for FieldElement {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
-        FieldElement::new(  
-            // Ensure the result is positive by adding the modulus before taking the modulo
-            (self.value - other.value + FieldElement::modulus()) % FieldElement::modulus() 
-        )
+        // The constructor now handles negative values properly
+        FieldElement::new(self.value - other.value)
     }
 }
 
