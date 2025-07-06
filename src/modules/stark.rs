@@ -416,12 +416,62 @@ impl Stark {
         println!("DEBUG: Sorted indices: {:?}", indices);
         
         // Debug: Check values at the indices FRI is querying
-        for (i, idx) in indices.iter().enumerate().take(2) {
-            println!("DEBUG Prover: combined_codeword[{}] = {}", idx, combined_codeword[*idx].value);
-            // Also check the evaluation domain point
-            let domain_point = self.fri.offset.clone() * self.fri.omega.pow(*idx as u128);
-            println!("DEBUG Prover: domain point at index {} = {}", idx, domain_point.value);
-            println!("DEBUG Prover: combination.eval(domain_point) = {}", combination.eval(domain_point));
+        println!("DEBUG Prover: First index from sorted list: {}", indices[0]);
+        let idx = indices[0];
+        println!("DEBUG Prover: combined_codeword[{}] = {}", idx, combined_codeword[idx].value);
+        // Also check the evaluation domain point
+        let domain_point = self.fri.offset.clone() * self.fri.omega.pow(idx as u128);
+        println!("DEBUG Prover: domain point at index {} = {}", idx, domain_point.value);
+        let combination_eval = combination.eval(domain_point.clone());
+        println!("DEBUG Prover: combination.eval(domain_point) = {}", combination_eval.value);
+        
+        // Let's also manually verify this matches the codeword
+        if combination_eval != combined_codeword[idx] {
+            println!("ERROR: Combination eval doesn't match codeword!");
+        }
+        
+        // Debug: Check what the individual transition quotients evaluate to at this point
+        for (tq_idx, tq) in transition_quotients.iter().enumerate() {
+            let tq_eval = tq.eval(domain_point.clone());
+            println!("DEBUG Prover: TQ {} eval at domain point: {}", tq_idx, tq_eval.value);
+        }
+        
+        // Debug: Let's also manually evaluate the transition constraints at this numeric point
+        // to see if we get the same values as the verifier
+        let next_point = domain_point.clone() * self.omicron.clone();
+        let current_trace_vals = vec![
+            trace_polynomials[0].eval(domain_point.clone()),
+            trace_polynomials[1].eval(domain_point.clone())
+        ];
+        let next_trace_vals = vec![
+            trace_polynomials[0].eval(next_point.clone()),
+            trace_polynomials[1].eval(next_point.clone())
+        ];
+        
+        let mut numeric_point = vec![domain_point.clone()];
+        numeric_point.extend(current_trace_vals.clone());
+        numeric_point.extend(next_trace_vals.clone());
+        
+        for (tc_idx, tc) in transition_constraints.iter().enumerate() {
+            let tc_numeric_eval = tc.eval(&numeric_point);
+            println!("DEBUG Prover: TC {} numeric eval: {}", tc_idx, tc_numeric_eval.value);
+            
+            let tz_eval = self.transition_zeroifier().eval(domain_point.clone());
+            let numeric_quotient = tc_numeric_eval / tz_eval;
+            println!("DEBUG Prover: TC {} numeric quotient: {}", tc_idx, numeric_quotient.value);
+        }
+        
+        // Debug: Also check what the trace polynomials evaluate to at this point
+        for (tp_idx, tp) in trace_polynomials.iter().enumerate() {
+            let tp_eval = tp.eval(domain_point.clone());
+            println!("DEBUG Prover: Trace poly {} eval at domain point: {}", tp_idx, tp_eval.value);
+        }
+        
+        // And check the "next" values (scaled by omicron)
+        println!("DEBUG Prover: Next point calculated as current * omicron: {}", next_point.value);
+        for (tp_idx, tp) in trace_polynomials.iter().enumerate() {
+            let tp_next_eval = tp.eval(next_point.clone());
+            println!("DEBUG Prover: Trace poly {} eval at NEXT point: {}", tp_idx, tp_next_eval.value);
         }
 
         println!("after fri proof stream len {}", proof_stream.objects.len());
@@ -615,6 +665,10 @@ impl Stark {
         // verify leafs of combination polynomial
         for i in 0..indices.len() {
             let current_index = indices[i];
+            
+            if i == 0 {
+                println!("DEBUG Verifier: Processing index {} which is indices[{}]", current_index, i);
+            }
 
             // get trace values by applying a correction ot the boundary quotient values (which are the leafs)
             let domain_current_index = self.generator.clone() * (self.omega.pow(current_index as u128));
@@ -624,8 +678,13 @@ impl Stark {
             if i == 0 {
                 println!("DEBUG Verifier: Evaluating combination at index {} (domain point {})", 
                          current_index, domain_current_index.value);
-                println!("DEBUG Verifier: Generator: {}, Omega: {}", self.generator.value, self.omega.value);
-                println!("DEBUG Verifier: FRI offset: {}, FRI omega: {}", self.fri.offset.value, self.fri.omega.value);
+                println!("DEBUG Verifier: Next index: {}, next domain point: {}", next_index, domain_next_index.value);
+                
+                // The issue might be that we need to map the FRI domain point back to trace domain
+                // In the prover, the "next" trace values are evaluated at current_point * omicron
+                let trace_next_point = domain_current_index.clone() * self.omicron.clone();
+                println!("DEBUG Verifier: Trace next point should be: {}", trace_next_point.value);
+                
                 println!("DEBUG Verifier: Expected FRI value at this index: {}", values[i].value);
             }
 
@@ -661,14 +720,11 @@ impl Stark {
                 let tc_value = transition_constraints[s].clone().eval(&point);
                 transition_constraints_values.push(tc_value.clone());
                 if i == 0 && s == 0 {
-                    println!("DEBUG Verifier: Evaluating transition constraint {} at point", s);
-                    println!("  Point has {} elements", point.len());
-                    println!("  Point[0] (x): {}", point[0].value);
-                    println!("  Point[1] (current state[0]): {}", point[1].value);
-                    println!("  Point[2] (current state[1]): {}", point[2].value);
-                    println!("  Point[3] (next state[0]): {}", point[3].value);
-                    println!("  Point[4] (next state[1]): {}", point[4].value);
-                    println!("  Result: {}", tc_value.value);
+                    println!("DEBUG Verifier: Reconstructed trace values:");
+                    println!("  Current state[0]: {}", point[1].value);
+                    println!("  Current state[1]: {}", point[2].value);
+                    println!("  Next state[0]: {}", point[3].value);
+                    println!("  Next state[1]: {}", point[4].value);
                 }
             }
 
@@ -683,18 +739,16 @@ impl Stark {
             for s in 0..transition_constraints_values.len(){
                 let tcv = transition_constraints_values[s].clone();
                 let tz_eval = self.transition_zeroifier().eval(domain_current_index.clone());
-                if i == 0 && s == 0 {
-                    println!("  Transition constraint value {}: {}", s, tcv.value);
-                    println!("  Transition zeroifier eval: {}", tz_eval.value);
-                }
-                let quotient = tcv / tz_eval;
+                let quotient = tcv.clone() / tz_eval.clone();
                 terms.push(quotient.clone());
                 let shift = self.max_degree(transition_constraints.clone()) - self.transition_quotient_degree_bounds(transition_constraints.clone())[s];
                 let shifted_term = quotient.clone() * (domain_current_index.pow(shift as u128));
                 terms.push(shifted_term.clone());
                 if i == 0 {
-                    println!("  Term {} (tq {}): {}", 1 + s*2, s, quotient.value);
-                    println!("  Term {} (tq {} shifted by {}): {}", 2 + s*2, s, shift, shifted_term.value);
+                    println!("DEBUG Verifier: TC {} value: {}, quotient: {}", s, tcv.value, quotient.value);
+                    if s == 0 {
+                        println!("DEBUG Verifier: Transition zeroifier eval: {}", tz_eval.value);
+                    }
                 }
             }
             for s in 0..self.num_registers {
